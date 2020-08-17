@@ -21,6 +21,23 @@ from .symmetry_base import Symmetry
 
 
 
+# TODO: consider Sym1D, Sym3D inheriting from SymmetryBase directly, before addition of irrep maps -- how to achieve this?
+# Then create SymWithMap1D, SymWithMap3D... but is this really a good idea??? 
+# The only reason is, we'd like to reduce the number of non-instantiable classes, and have more classes that are instantiable and testable individually.
+# (1) Create internal Sym object in SymWithMap, which can be 1D or 3D depending on the input, and the feed it to map creation method
+#     -- plus, we re-implement all sym methods that we wanna be publically exposed and used
+# (2) Inherit by passing Sym1D or Sym3D as a parent class argument: can set parent class from the constructor, or we can pass it as a variable argument 
+#     in the exact same way as the class factory in our Embedded unit tests.
+#
+# The option (1) might make sense as an additional layer of abstraction that hides internal construction methods and exposes only the methods 
+# that are meant to be used externally. It constructs and stores self.sym = SymFactory(..input..), gives Sym1D or Sym3D depending on the input.
+# Then, self.sym is used in self.compute_map() method. The public methods are reimplemented.
+#
+# Let's think about this later.
+#
+
+
+
 
 class SymmetryWithIrrepMap(Symmetry):
 
