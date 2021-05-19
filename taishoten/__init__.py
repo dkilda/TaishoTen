@@ -1,10 +1,97 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from .symmetry  import SymConFactory, SymCon1D, SymCon3D
-from .symmetry  import SymFactory, Sym1D, Sym3D
+from . import symmetry
+from . import transformations
+from . import params
+from . import util
 
-from .tensor    import Tensor
+from .util import StrSet
+from .tensor import Tensor
 from .symeinsum import symeinsum
 
-from .util      import Str
+from .symmetry import SymmetryContractor
+from .symmetry import Symmetry, Symmetry1D, Symmetry3D
+from .symmetry import Map, contract_maps
+from .symmetry import compute_maps, get_maplegs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

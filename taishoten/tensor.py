@@ -4,219 +4,221 @@ import numpy as np
 import copy  as cp
 import itertools
 
-from . import backends
+import taishoten.backends as backends
+import taishoten.util as util
 
-from .util import Str
-from .util import assert_equal, isiterable, del_from_list, multisorted
-from .util import subscript_to_legs, legs_to_subscript
-from .util import symlegs_and_denselegs_to_subscript
-
-from .params import ALPHABET
-
+from taishoten.util     import StrSet
+from taishoten.params   import ALPHABET
+from taishoten.symmetry import Map
 
 
 class Tensor:
 
-  def __init__(self, array, symmetry=None, backend=None):
+  def __init__(self, array, sym=None, backend=None):
 
-      self._array   = array 
-      self._sym     = symmetry
       self._backend = backends.get_backend(backend)
- 
-      if   self._sym is None: 
+      self._sym     = sym
+      self._array   = self.backend.asarray(array) 
+
+      if   sym is None: 
    
            # No symmetry: treat as a dense tensor
-           self._ndim        = self._array.ndim
-           self._dense_shape = self._array.shape
+           self._ndim        = array.ndim
+           self._dense_shape = array.shape
 
       else:
-           # Num of signed and unsigned symlegs
-           num_signed_legs   = self._sym.get_num_signed_legs()
-           num_unsigned_legs = self._sym.get_num_unsigned_legs() 
+           # Dense indices in the symmetric array 
+           # (whether in its full or truncated form)
+           dense_idx = slice(array.ndim - self._ndim, array.ndim)
 
-           # Get ndim = num of symlegs (signed and unsigned) = num of denselegs, 
-           #    shape = shape of a dense block only (i.e. denselegs shape) 
-           self._ndim        = num_signed_legs + num_unsigned_legs 
-           self._dense_shape = self._array.shape[max(num_signed_legs - 1, 0) : ]
+           # Get ndim and dense shape:
+           # Num of denselegs = num of signed legs + num of unsigned legs,
+           # Num of symlegs   = num of signed legs
+           self._ndim        = sym.num_signed_legs + sym.num_unsigned_legs
+           self._dense_shape = array.shape[dense_idx]
 
-           # Make sure backends match
-           assert_equal(self._backend, self._sym.backend, \
-                        "Tensor: tensor backend and symmetry backend must be the same")
+           # Construct truncated form of Tensor._array
+           self._make_truncated_array()
 
 
-  # --- Properties and get/set methods ----------------------------------------------------------------------
+  # --- Auxiliary methods --------------------------------------------------- #
+
+  def _as_new_tensor(self, array=None, sym=None):
+
+      # Create a new Tensor object
+      if  array is None:
+          array = self._array
+
+      if  sym is None:
+          sym = self._sym
+
+      return type(self)(array, sym)
+
+
+
+  def _make_subscript(self, make_full=False):
+
+      # Make dense and symmetric legs (ndim = num of dense legs)
+      denselegs = Str(ALPHABET[:self.ndim])
+      symlegs   = util.make_symlegs(denselegs, self.sym.signs)
+
+      # Construct legs of the full form (e.g. ABab), 
+      # the truncated form (e.g. Aab), and the map (e.g. AB)
+      full_legs  = symlegs + denselegs
+      trunc_legs = util.truncate(symlegs) + denselegs
+      map_legs   = symlegs
+
+      # Generate subscript,
+      # e.g. ABab,AB->Aab (full-to-truncated transformation), 
+      # or   Aab,AB->ABab (truncated-to-full transformation)
+      if  make_full:
+          subscript = util.legs_to_subscript(trunc_legs, map_legs, full_legs)
+      else:
+          subscript = util.legs_to_subscript(full_legs,  map_legs, trunc_legs)
+
+      return subscript, map_legs
+  
+
+
+  def _make_truncated_array(self): 
+
+      # Construct truncated form of Tensor._array
+      trunc_ndim = 2*self.ndim - 1
+
+      if  array.ndim > trunc_ndim:
+
+          # Get full-to-truncated subscript
+          subscript, map_legs = self._make_subscript()
+
+          # Compute map from sym, compute symmetrized array 
+          new_map     = Map.compute(self.sym, map_legs, self.backend)
+          self._array = self.backend.einsum(subscript, \
+                                            self._array, new_map.array)
+      return self
+
+
+
+  def _get_full_array(self): 
+
+      # If no symmetry
+      if  ISNOT(self.sym):
+          return self._array
+
+      # Get truncated-to-full subscript
+      subscript, map_legs = self._make_subscript(make_full=True)
+
+      # Compute map from sym, compute full array (no hidden legs)
+      new_map    = Map.compute(self.sym, map_legs, self.backend)
+      full_array = self.backend.einsum(subscript, \
+                                       self._array, new_map.array)
+      return full_array
+
+
+
+  # --- Properties and get/set methods -------------------------------------- #
 
   @property
-  def dense_shape(self):
-      return cp.deepcopy(self._dense_shape)
-
-  @property
-  def ndim(self):
-      return cp.deepcopy(self._ndim)
+  def array(self):
+      return self._array
 
   @property
   def backend(self):
       return self._backend
 
-  def get_sym(self):
-      return cp.deepcopy(self._sym)
+  @property
+  def ndim(self):
+      return self._ndim
 
-  def set_sym(self, sym):
-      self._sym = sym
-      return self
+  @property
+  def sym(self):
+      return self._sym
 
-  def get_array(self):
-      return cp.deepcopy(self._array)
-
-  def get_map(self):
-      if  self._sym is None:
+  @property
+  def signs(self):
+      if  ISNOT(self.sym):
           return None
-      return self._sym.get_map()
+      return self.sym.signs
 
-  def get_shape(self):
 
-      # If nosym, just get dense shape
+  @property
+  def shape(self):
+
+      # If no sym, just get dense shape
       if  self._sym is None:
           return self.dense_shape
-  
-      # From dense shape, get the full shape
-      full_shape = self._sym.get_full_shape(self.dense_shape)
+
+      # Combine symmetric and dense shapes
+      full_shape = self._sym.shape + self.dense_shape
       return full_shape
 
 
-
-  # --- Symmetric operations: compute full/reduced form, transform using a set of maps, etc -----------------
-
-  def compute_full_array(self):
-
-      # If no symmetry: return array itself
-      if  self._sym is None:
-          return self.get_array() 
-
-      # Get map, get reduced-to-full subscript
-      subscript  = self._reduced_to_full_subscript()
-      irrep_map  = self._sym.get_map()
-
-      # Construct full array (no hidden legs)
-      full_array = self.backend.einsum(subscript, self._array, irrep_map)
-      return full_array  
+  @property
+  def dense_shape(self):
+      return self._dense_shape
 
 
-  def symmetrize(self):
-
-      # If no symmetry: return immediately
-      if  self._sym is None:
-          return self
-
-      # Get map, compute full array (no hidden legs), get full-to-reduced subscript
-      subscript  = self._full_to_reduced_subscript() 
-      irrep_map  = self._sym.get_map()
-      full_array = self.compute_full_array()
-     
-      # Compute reduced array
-      self._array = self.backend.einsum(subscript, full_array, irrep_map)
-      return self
+  def denseleg_dims(self, denselegs):
+      return {leg: dim for leg, dim in zip(denselegs, self.dense_shape)}
 
 
-  def transform(self, transform_sequence, denselegs):
 
-      # Num of transformations
-      num_transforms = len(transform_sequence) 
+  # --- Symmetric transformations ------------------------------------------- # 
 
-      # If num of required transformations is zero: trivial return
-      if  num_transforms == 0:
+  def transform(self, transform_path, denselegs):
+
+      # Num of transformation nodes
+      num_nodes = len(transform_path) 
+
+      # (1) Trivial case: path with no transformations
+      if  num_nodes == 0:
           return self._as_new_tensor(self._array)
 
-      # Construct symlegs list and maps list from the transform sequence
-      symlegs_list = []
-      maps_list    = []
+      # (2) Construct a list of symlegs and maps 
+      #     for transformation einsum
+      symlegs_lst = [node.start_legs]
+      maps_lst    = []
 
-      for i, transf in enumerate(transform_sequence):
-          
-          # First transformation: add starting legs config of the tensor 
+      for i, node in enumerate(transform_path): 
+
+          # First node: add start legs of tensor
           if  i == 0:
-              symlegs_list += [transf.start_legs]
+              symlegs_lst += [node.start_legs]
 
-          # Add map legs and map operator
-          symlegs_list += [transf.map_legs]
-          maps_list    += [transf.get_map()]
+          # Middle nodes: add map legs and map itself
+          symlegs_lst += [node.map_legs]
+          maps_lst    += [node.map_array] 
 
-          # Last transformation: add final legs config of the tensor
-          if  i == num_transforms - 1:
-              symlegs_list += [transf.end_legs]
+          # Last node: add end legs of tensor
+          if  i == num_nodes - 1:
+              symlegs_lst += [node.end_legs]
 
-      # Get dense legs list (no denselegs for maps, only for the initial and final tensor)
-      denselegs_list     = [''] * len(symlegs_list)  
-      denselegs_list[ 0] = denselegs 
-      denselegs_list[-1] = denselegs
+      # (3) Construct a list of denselegs. NB maps have no dense legs, 
+      #     only the initial and final tensors do.
+      denselegs_lst     = [StrSet()] * len(symlegs_lst)  
+      denselegs_lst[ 0] = denselegs 
+      denselegs_lst[-1] = denselegs 
 
-      # Construct subscript from symlegs and denselegs
-      subscript = symlegs_and_denselegs_to_subscript(symlegs_list, denselegs_list)
-      
-      # Multiply tensor with all the maps on a transformation sequence
-      new_array = self.backend.einsum(subscript, self._array, *maps_list)  
+      # (4) Construct einsum subscript from symlegs and denselegs     
+      subscript = util.sym_dense_legs_to_subscript(symlegs_lst, denselegs_lst)
+
+      # (5) Contract tensor with all the transformation maps
+      new_array = self.backend.einsum(subscript, self._array, *maps_lst)  
       return self._as_new_tensor(new_array)
   
 
-
-  # --- Auxiliary methods -----------------------------------------------------------------------------------
-
-  def _as_new_tensor(self, array, sym=None):
-
-      if  sym is None:
-          sym = self._sym
-
-      new_tensor = Tensor(array, sym)
-      return new_tensor
-
-
-  def _reduced_to_full_subscript(self):
-
-      # Reduced-to-full transformation subscript
-      return self._make_self_transform_subscript(to_reduced=False)
-
-
-  def _full_to_reduced_subscript(self):
-
-      # Full-to-reduced transformation subscript
-      return self._make_self_transform_subscript(to_reduced=True)
-
-
-  def _make_self_transform_subscript(self, to_reduced):
-
-      # Signs, num of dims (shortcut)
-      signs = self._sym.signs
-      ndim  = self._ndim
-
-      # Make legs and pure legs, e.g. legs = "ab"
-      legs     = Str(ALPHABET[:ndim])
-      purelegs = legs.purify(signs)
-
-      # Generate subscript, e.g. ABab,AB->Aab
-      legs_FULL    = purelegs + legs
-      legs_REDUCED = purelegs.truncate() + legs
-      legs_MAP     = purelegs
-
-      # Arrange legs in order
-      if   to_reduced:
-           legs_list = [legs_FULL, legs_MAP, legs_REDUCED] 
-      else:
-           legs_list = [legs_REDUCED, legs_MAP, legs_FULL] 
-
-      # Convert to subcript and return
-      subscript = legs_to_subscript(legs_list)
-      return subscript
-
-  # ---------------------------------------------------------------------------------------------------------
+  # ------------------------------------------------------------------------- #
 
 
 
 
 
 
+def get_denseleg_dims(tensA, tensB, denselegs_A, denselegs_B):
 
+    return {**tensA.denseleg_dims(denselegs_A), \
+            **tensB.denseleg_dims(denselegs_B)  } 
 
-
+    
 
 
 
