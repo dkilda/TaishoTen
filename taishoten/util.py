@@ -55,7 +55,6 @@ def noniterable(x):
 
 
 
-
 # --- Itertools wrappers ---------------------------------------------------- #
 
 def cartesian_prod(*args):
@@ -87,58 +86,9 @@ def idx_combinations(num_elements, num_elements_per_combo):
 
 
 
-# --- Operations on iterable objects ---------------------------------------- #
+# --- Str class ------------------------------------------------------------- #
 
-def del_from_dict(dct, keys):
- 
-    # Local copy
-    x = cp.deepcopy(dct)
-
-    # Delete dict items at given keys
-    for kk in keys:
-        del x[kk]
-    return x
-
-
-
-def del_from_list(lst, indices):
-
-    # Local copy
-    x = cp.deepcopy(lst)
-
-    # Delete list items at given indices.
-    # Note that you need to delete them in reverse order
-    # so that you don't throw off the subsequent indices.
-    for idx in sorted(indices, reverse=True):
-        del x[idx]
-    return x
-
-
-
-def to_string(x):
-
-    # Convert an iterable x to string
-    return ''.join(str(val) for val in x)
-
-
-
-
-
-
-
-# --- Miscellaneous functions ----------------------------------------------- #
-
-@property
-def NotImplementedField(self):
-    raise NotImplementedError
-
-
-
-
-# --- StrSet class ---------------------------------------------------------- #
-
-
-class StrSet:
+class Str:
 
    def __init__(self, *args, **kwargs):
 
@@ -151,52 +101,32 @@ class StrSet:
        # Update StrSet
        self._initialize(*args, **kwargs)
        return self
-       
+
+
 
    # --- Initialization and new object creation ----------------------------- #
 
-   def _initialize(self, x="", order=None)
+   def _initialize(self, x="", key=None, reverse=False):
 
-       # If input is StrSet --> convert to string
+       # Str input
        if  isinstance(x, type(self)):
-           x = x.to_str() 
-
-       # If input is a string --> initialize and return
-       if  isinstance(x, str):
-           self._initialize_from_string(x)
+           self._str = str(x) 
            return
 
-       # If input is a list/tuple/ndarray --> convert to string
+       # List/tuple/ndarray input: convert to string
        if  isinstance(x, (list, tuple, np.ndarray)):
            x = to_string(x)
 
-       # If input is a set --> convert to string
+       # Set input: convert to sorted string
        if  isinstance(x, set):
+           x = sorted_string(x, key=key, reverse=reverse)
 
-           # Default order
-           if  ISNOT(order):
-               order = {val: i for i, val in enumerate(x)}
-           
-           # Convert set to string, using the order provided
-           sorted_x = sorted(x, key=lambda k: order[k])
-           x        = to_string(sorted_x)
+       # Make sure our input is a string with all unique elements
+       # (so that our Str can be treated as str and set simultaneously)
+       assertequal(type(x), str, "Str: input type must be str")
+       assertunique(x, "Str: input elements must be unique")
 
-       # By this point, input should have been converted to string
-       # (or is completely invalid)
-       self._initialize_from_string(x)
-
-
-
-   def _initialize_from_string(self, x):
-
-       # Make sure our input is str
-       assertequal(type(x), str, "StrSet: input type must be str")
-
-       # Make sure all input elements are unique, 
-       # so that our StrSet can be treated as str and set simultaneously
-       assertunique(x, "StrSet: input elements must be unique")
-
-       # Set attributes
+       # Initialize
        self._str = x
 
 
@@ -211,6 +141,10 @@ class StrSet:
 
    def to_set(self):
        return set(self._str)
+
+   def sorted(self):
+       my_set = self.to_set()
+       return type(self)(my_set)
 
    def upper(self):
        new_str = self._str.upper() 
@@ -238,7 +172,7 @@ class StrSet:
 
 
    def __iter__(self):
-       return StrSetIterator(self._str)
+       return StrIterator(self._str)
 
 
    def __hash__(self):
@@ -267,24 +201,24 @@ class StrSet:
        return self.to_str() >= other.to_str()
 
    def __add__(self, other):
-       combo = self.to_set() + other.to_set()
-       return combine_strsets(self, other, combo)
+       out = self.to_set() + other.to_set()
+       return type(self)(out)
 
    def __sub__(self, other):  
-       combo = self.to_set() - other.to_set()
-       return combine_strsets(self, other, combo)
+       out = self.to_set() - other.to_set()
+       return type(self)(out)
 
    def __and__(self, other):
-       combo  = self.to_set() & other.to_set()
-       return combine_strsets(self, other, combo)
+       out  = self.to_set() & other.to_set()
+       return type(self)(out)
 
    def __or__(self, other):
-       combo = self.to_set() | other.to_set()
-       return combine_strsets(self, other, combo)
+       out = self.to_set() | other.to_set()
+       return type(self)(out)
 
    def __xor__(self, other):
-       combo = self.to_set() ^ other.to_set()
-       return combine_strsets(self, other, combo)
+       out = self.to_set() ^ other.to_set()
+       return type(self)(out)
 
 
 
@@ -310,8 +244,7 @@ class StrSet:
 
 
 
-
-class StrSetIterator:
+class StrIterator:
 
    """
    Making your class iterable:
@@ -334,48 +267,19 @@ class StrSetIterator:
        self._idx += 1
 
        try:
-           return StrSet(self._x[self._idx - 1])
+           return Str(self._x[self._idx - 1])
 
        except IndexError:
+
            self._idx = 0
            raise StopIteration
        
 
 
+def join(*args): 
 
-
-
-# --- Functions operating on StrSet ----------------------------------------- #
-
-
-def combine_strsets(x, y, combo_xy):
-
-    """
-    combo_xy: can be any iterable (set, str, list, etc) 
-              obtained after some binary operation 
-              that combines elements from x and y.
-    """
-
-    # Since combo_xy may be unordered or ordered incorrectly,
-    # we order its elements according to input "string"
-    def ordered_str(string):
-        return ''.join(s for s in string if s in combo_xy)
-
-    # Take combo_xy elements \in x, order them according to x.
-    # Take combo_xy elements \in y, order them according to y.
-    # Add both strings together so that 
-    # new_str = "combo_xy elements \in x, combo_xy elements \in y"
-    new_str = ordered_str(str(x)) + ordered_str(str(y))
-
-    # Create a new StrSet
-    return StrSet(new_str)
-
-
-
-def sum_strsets(*args):
-
-    # Sum StrSet objects
-    tot = StrSet()
+    # Join Str objects
+    tot = Str()
     for arg in args:
         tot += arg
     return tot
@@ -383,8 +287,96 @@ def sum_strsets(*args):
 
 
 
-# --- Functions for manipulating legs and subscripts ------------------------ #
+# --- Functions for iterables containing legs, nodes, maps, etc ------------- #
 
+def dictzip(keys, vals):
+    return dict(zip(keys, vals))
+
+
+
+def dictriplet(a, b, c):
+    return {"A": a, "B": b, "C": c}
+
+
+
+def get_items(x, idx):
+    return [x[i] for i in idx]
+
+
+
+def get_legs(xs):
+    return [x.legs for x in xs]
+
+
+
+def get_from_legs(xs, legs):
+
+    xlegs  = get_legs(xs)
+    xs_dct = dictzip(xlegs, xs)
+
+    return xs_dct[legs]
+
+
+
+def sort_by_legs(xs, reverse=False):
+
+    sorted_xs = sorted(xs,        lambda x:     x.legs)
+    sorted_xs = sorted(sorted_xs, lambda x: len(x.legs), reverse=reverse)
+    return sorted_xs
+
+
+
+def sort(xs, reverse=False):
+
+    sorted_xs = sorted(xs)
+    sorted_xs = sorted(sorted_xs, key=len, reverse=reverse)
+    return sorted_xs
+
+
+
+def to_string(x):
+
+    # Convert an iterable x to string
+    return ''.join(str(val) for val in x)
+
+
+
+def sorted_string(x, key=None, reverse=False):
+    return ''.join(sorted(x, key=key, reverse=reverse))
+
+
+
+# --- Functions for manipulating signs -------------------------------------- #
+
+def signs_to_int(signs):
+
+    SIGN = {'+': 1, '-': -1}
+    return (SIGN[s] for s in signs)
+
+
+
+def flip_signs(signs): 
+
+    FLIP = {'+': '-', '-': '+', '0': '0'}
+    return ''.join(FLIP[sgn] for sgn in signs)
+
+
+
+def phased_signs(signs, phase=1):
+
+    if  phase ==  1:
+        return signs
+
+    if  phase == -1:
+        return flip_signs(signs)
+
+    msg = "phased_signs: phase must be +1 or -1, not {}".format(phase)
+    raise ValueError(msg)
+
+
+
+
+# --- Functions for manipulating legs and subscripts ------------------------ #
 
 def subscript_to_legs(subscript): 
 
@@ -394,7 +386,7 @@ def subscript_to_legs(subscript):
  
     # Split up into list, using ',' as delim
     legs = sub.replace('->', ',').split(',')
-    legs = [StrSet(x) for x in legs]
+    legs = [Str(x) for x in legs]
     return legs
  
 
@@ -402,23 +394,10 @@ def subscript_to_legs(subscript):
 def legs_to_subscript(*legs):
 
     # Convert list of legs to subscript 
-    subscript = ','.join(legs[:-1].to_str()) + '->' + legs[-1].to_str() 
+    subscript = ','.join(str(legs[:-1])) + '->' + str(legs[-1]) 
     return subscript  
 
-    
-
-def sym_dense_legs_to_subscript(symlegs, denselegs, truncated=False): 
-
-    # Truncate input symlegs
-    if not truncated:
-       symlegs = truncate(symlegs)
-
-    # Make subscript from symlegs and denselegs input
-    legs      = [ss + dd for ss, dd in zip(symlegs, denselegs)]
-    subscript = legs_to_subscript(*legs)    
-    return subscript
-
-
+ 
 
 def truncate(legs):
 
@@ -428,108 +407,120 @@ def truncate(legs):
 
     # If "legs" consists of several leg groups, 
     # truncate each one individually
+    if  isinstance(legs, dict):
+        return {key: trunc(legs[key]) for key in legs.keys()}
+
     if  isinstance(legs, (list, tuple, np.ndarray)):
-        trunc_legs = type(legs)([trunc(ll) for ll in legs])
-        return trunc_legs
+        return type(legs)([trunc(ll)  for ll  in legs])
 
     # If "legs" consists of a single bunch
     return trunc(legs)
 
 
 
-def cut_unsigned(legs, fullsigns, unsigned='0'):
+def cut_unsigned(x, fullsigns, unsigned='0'):
 
-    # Cut unsigned legs 
-    new_legs = ''.join(v for i, v in enumerate(legs) \
+    if  isinstance(x, (list, tuple, np.ndarray)):
+        return cut_unsigned_indices(x, fullsigns, unsigned=unsigned)
+
+    if  isinstance(x, Str):
+        return cut_unsigned_legs(x, fullsigns, unsigned=unsigned)
+
+    raise ValueError("cut_unsigned: invalid x type, ".format(type(x)))
+
+
+
+def cut_unsigned_legs(x, fullsigns, unsigned='0'):
+
+    signed_x = ''.join(v for i, v in enumerate(x) \
                                   if fullsigns[i] != unsigned)
-    return StrSet(new_legs)
+    return Str(signed_x)
 
 
+
+def cut_unsigned_indices(idx, fullsigns, unsigned='0'):
+
+    signed_idx = []
+    num_cut    = 0
+
+    for i in idx:
+
+        if  fullsigns[i] == unsigned:
+            num_cut += 1
+            continue
+  
+        signed_idx.append(i - num_cut)
+
+    return signed_idx
+
+    
 
 def get_num_legs(*args):
 
-    # Get num of (unique) legs in a sum of StrSet objects
-    return len(sum_strsets(*args))
+    # Get num of (unique) legs in a sum of Str objects
+    return len(join(*args))
 
 
 
-def make_symlegs(denselegs, fullsigns):
+def make_legs(num_legs): 
+    ALPHABET = 'abcdefghijklmnoprstuvwxyz'
+    legs = Str(ALPHABET[:num_legs])
+    return legs
+
+
+
+def make_symlegs(legs, fullsigns):
 
     # Create symlegs from denselegs
-    symlegs = denselegs.upper() 
+    symlegs = legs.upper() 
     symlegs = cut_unsigned(symlegs, fullsigns)
     return symlegs
 
 
 
 
-
-
-
-
 # --- Generators for leg indices and data ----------------------------------- #
 
+def zip_compress(a, b, selectors):
 
-def gen_data(src, dest, dest_data): 
+    legsA = a[0]
+    legsB = b[0]
 
-    # Take legs from "src", 
-    # get their indices in "dest" and their data in "dest_data"
-    for idx in gen_idx(src, dest):
-        yield dest_data[idx]
+    itemsA = dictzip(*a)
+    itemsB = dictzip(*b)
 
- 
+    for leg in selectors:
 
-def gen_idx(src, dest): 
- 
-    # Take legs from "src", get their indices in "dest"
-    for s in src:
-        if s in dest:
-           idx = dest.index(s)
-           yield idx
-
-
-
-def gen_binary_data(conjunction):
-
-    """
-    Extension of gen_data to "dest"/"dest_data" with two 
-    elements, i \in (0,1). The "dest" data from different
-    elements can be combined in two ways: AND or OR. 
- 
-    """
-    
-    def _gen_binary_data(src, dest, dest_data):
-
-        # Retrieve data of leg "s" in dest component "i" 
-        def data(s, i):
-            idx = dest[i].index(s) 
-            dat = dest_data[i][idx]
-            return dat
-
-
-        if   conjunction == "AND":
-
-             # Yield data from both elements i=0,1 (AND)
-             for s in src:
-                 yield data(s,0), data(s,1) 
-
-        elif conjunction == "OR":
-
-             # Yield data from one of the elements (OR)
-             for s in src:
-                 if   s in dest[0]:
-                      yield data(s,0)
-                 else:
-                      yield data(s,1)
-
+        if   leg in itemsA:
+             yield itemsA[leg]
         else:
-             msg = "gen_binary_data: invalid conjunction {}"
-             msg = msg.format(conjunction)
-             raise ValueError(msg)
-
-    return _gen_binary_data
+             yield itemsB[leg]
 
 
+
+def zip_shared(a, b):
+
+    legsA    = a[0]
+    legsB    = b[0]
+    sharedAB = legsA & legsB
+
+    itemsA = dictzip(*a)
+    itemsB = dictzip(*b)
+
+    for leg in sharedAB:            
+        yield itemsA[leg], itemsB[leg]
+
+
+
+def get_shared_indices(legsA, legsB):
+
+    idxA = (legsA, range(len(legsA))))
+    idxB = (legsB, range(len(legsB))))    
+
+    shared_idx_AB              = list(zip_shared(idxA, idxB))
+    shared_idx_A, shared_idx_B = zip(*shared_idx_AB)
+
+    return shared_idx_A, shared_idx_B
 
 
 

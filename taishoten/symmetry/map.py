@@ -10,15 +10,16 @@ import itertools
 import taishoten.backends as backends
 import taishoten.util as util
 
-from taishoten.util import StrSet
+from taishoten.util import Str
 from taishoten.util import assertequal
 from taishoten.util import IS, ISNOT, ARE, ARENOT
 
-from taishoten.params import ALPHABET, SIGN, FLIP, SYMTOL
+from .symmetry import set_symtol
 
 
 
-def contract_maps(mapA, mapB, out_legs=None, tol=SYMTOL):
+
+def contract_maps(mapA, mapB, out_legs=None, tol=None):
 
     # Make sure mapA and mapB have the same backend
     msg = "contract_maps: mapA and mapB must have the same backend"
@@ -27,7 +28,7 @@ def contract_maps(mapA, mapB, out_legs=None, tol=SYMTOL):
 
     # Default output legs of (mapA, mapB) contraction: 
     # assume legs represented by the same letter are always contracted
-    if  out_legs is None:
+    if  ISNOT(out_legs):
         out_legs = (mapA.legs | mapB.legs) - (mapA.legs & mapB.legs)
 
     # Make the subscript
@@ -37,7 +38,7 @@ def contract_maps(mapA, mapB, out_legs=None, tol=SYMTOL):
     # find indices of nonzero entries in the resulting array
     out   = backend.einsum(subscript, mapA.array, mapB.array)
     shape = backend.shape(out)
-    idx   = backend.find_nonzeros(out, tol=tol)
+    idx   = backend.find_nonzeros(out, tol=set_symtol(tol))
 
     # Compute mapC from these indices and the desired shape of the map
     mapC = Map.compute_from_idx(shape, idx, legs=out_legs, backend=backend) 
@@ -52,7 +53,7 @@ class Map:
 
        # Set array, legs, and backend of this map
        self._backend = backends.get_backend(backend)
-       self._legs    = legs
+       self._legs    = Str(legs)
        self._array   = self.backend.asarray(array)
 
 
@@ -77,8 +78,8 @@ class Map:
        #
        flat_symlabels  = sym.flatten_symlabels()
        flat_symlabels -= sym.qtot
-       flat_symlabels  = sym.mod(flat_symlabels)
-       flat_symlabels  = sym.sum_vector_symlabels(flat_symlabels)
+       flat_symlabels  = sym.apply_mod(flat_symlabels)
+       flat_symlabels  = sym.sum_abs_inner_symlabels(flat_symlabels)
 
        # Find all indices where flat_symlabels = 0, i.e. the conservation law 
        # \sum_n |(sgn1*q1[i] + sgn2*q2[j] + ... - Qtot)[n] % mod| = 0 
@@ -144,7 +145,7 @@ class Map:
        assertequal(len(legs), self.ndim, msg)
 
        # Set map legs
-       self._legs = legs
+       self._legs = Str(legs)
        return self
 
 

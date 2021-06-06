@@ -7,12 +7,12 @@ import itertools
 import taishoten.transformations as trans
 import taishoten.util as util
 
-from taishoten.util import StrSet
+from taishoten.util import Str, dictriplet
 from taishoten.util import assertequal
 from taishoten.util import IS, ISNOT, ARE, ARENOT
 
-from taishoten.symmetry import SymmetryContractor
-from taishoten.tensor import Tensor
+from taishoten.symmetry import compute_symmetry_contraction
+from taishoten.tensor   import Tensor
 
 
 
@@ -28,7 +28,9 @@ def symeinsum(subscript, tensA, tensB):
 
     # Prelims: preprocess subscript, get dense legs from subscript
     subscript = preprocess_subscript(subscript)
-    denselegs = util.subscript_to_legs(subscript)
+    legs      = util.subscript_to_legs(subscript)
+    legs      = dictriplet(legs)
+
 
     # (1) Trivial case: no symmetry
     if  ISNOT(tensA.sym) or ISNOT(tensB.sym):
@@ -37,8 +39,8 @@ def symeinsum(subscript, tensA, tensB):
 
 
     # (2) Contract symmetries of tensA and tensB, compute all maps
-    symcon  = SymmetryContractor(tensA.sym. tensB.sym, denselegs) 
-    symC    = symcon.compute_output_sym()    
+    symcon  = compute_symmetry_contraction(tensA.sym, tensB.sym, legs) 
+    symC    = symcon.sym("C")   
     symlegs = symcon.symlegs()                                 
     maps    = compute_maps(symcon, backend)
 
@@ -46,22 +48,21 @@ def symeinsum(subscript, tensA, tensB):
     # (3) Direct contraction
     if  trans.good_to_contract(symlegs): 
 
-        full_subscript = util.sym_dense_legs_to_subscript(symlegs, denselegs)
+        full_subscript = make_full_subscript(symlegs, legs)
         arrayC = backend.einsum(full_subscript, tensA.array, tensB.array)
-
         return Tensor(arrayC, symC, backend=backend)
 
 
     # (4) Direct contraction not possible, transformations are needed
     path = trans.find_optimal_transform_path(maps, symlegs)
 
-    tensA.transform(path[0], denselegs[0])
-    tensB.transform(path[1], denselegs[1])
+    tensA.transform(path["A"])
+    tensB.transform(path["B"])
 
     arrayC = backend.einsum(full_subscript, tensA.array, tensB.array)
 
     tensC = Tensor(arrayC, symC, backend=backend)
-    tensC = tensC.transform(path[2], denselegs[2])
+    tensC = tensC.transform(path["C"])
 
     return tensC
 
@@ -88,10 +89,20 @@ def preprocess_subscript(subscript):
 
 
 
+def make_full_subscript(symlegs, legs):
 
+    # Construct a full list of legs, both symmetric and dense ones
+    full_legs = []
+    for key in legs.keys():
 
+         ll = legs[key]
+         ss = util.truncate(symlegs[key])
 
+         full_legs.append(ss + ll)
 
+    # Convert them to einsum subscript
+    subscript = util.legs_to_subscript(*full_legs) 
+    return subscript
 
 
 
