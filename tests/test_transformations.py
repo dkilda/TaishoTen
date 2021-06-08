@@ -201,14 +201,18 @@ class TestTransformations(TaishoTenTestCase):
 
    def test_find_transform_path(self):
 
+       keys = ("A", "B", "C")
+
        end_symlegs = tn.dictriplet(Str("IJQ"), Str("JOQ"), Str("IOQ"))
 
-       out = tn.find_transform_path(self.maps, self.symlegs)
-       ans = {key: self.pathlets[(key, end_symlegs[key])] \
-                                 for key in ("A", "B", "C")}
+       out, out1 = tn.find_transform_path(self.maps, self.symlegs) 
+       ans = {key: self.pathlets[(key, end_symlegs[key])] for key in keys}
 
        self.assertPath(out, self.maps, self.symlegs, end_symlegs)
        self.assertEqualPath(out, ans)
+       self.assertDict(out1, end_symlegs)
+
+       
 
 
 

@@ -30,7 +30,7 @@ def get_symlabels_shape(symlabels, truncate=False):
     if  truncate:
         symlabels = symlabels[:-1]
 
-    return (len(s) for s in symlabels)
+    return tuple([len(s) for s in symlabels])
 
 
 
@@ -71,9 +71,9 @@ def sum_meshgrid(*xs):
 
     # Make sure the inner element dimension 
     # for all vectors x \in xs is the same
-    def xshape(x): return x.shape[1:]
+    def xshape(x): return list(x.shape[1:])
 
-    xdim = list(xshape(xs[0]) 
+    xdim = list(xshape(xs[0])) 
     assert all(xshape(x) == xdim for x in xs), \
            "sum_meshgrid: all xs must have the same inner dimension"
 
@@ -89,10 +89,6 @@ def sum_meshgrid(*xs):
 
         # Accumulate reshaped vectors to form a summed grid
         summed_grid = summed_grid + x.reshape(shape)
-
-    # Corner case
-    if  summed_grid == 0:
-        summed_grid = np.array([])
 
     return summed_grid
         
@@ -140,10 +136,10 @@ class Symmetry:
 
    def __new__(cls, *args, **kwargs):
 
-       # Prevent Symmetry class from a direct instantiation
+       # Prevent Symmetry class from direct instantiation
        if  cls is Symmetry:
            raise TypeError("Symmetry class cannot be instantiated directly")
-       return object.__new__(cls, *args, **kwargs)
+       return object.__new__(cls)
 
 
 
@@ -195,11 +191,11 @@ class Symmetry:
 
    @property
    def flipped_fullsigns(self):
-       return flip_signs(self.fullsigns)
+       return util.flip_signs(self.fullsigns)
 
    @property
    def flipped_signs(self):
-       return flip_signs(self.signs)
+       return util.flip_signs(self.signs)
        
 
 
@@ -294,8 +290,6 @@ class Symmetry:
       
        """
 
-
-
        # Default indices of vectors that we'll use to construct meshgrid
        if  ISNOT(indices):
            indices = range(self.num_symlegs)
@@ -307,8 +301,9 @@ class Symmetry:
 
        # Compute signed symlabels for given indices: 
        # Q_i = q_i * sgn_i * phase, i \in indices  
-       symlabels = [self.symlabels[i] * self.signs[i] * phases \ 
-                                                        for i in indices]
+       signs     = util.signs_to_int(self.signs)
+       symlabels = [self.symlabels[i] * signs[i] * phase for i in indices]
+
        # Accumulate signed symlabels 
        # Q = \sum_i Q_i of all indices i \in indices, flatten them out 
        summed_symlabels = sum_meshgrid(*symlabels)
@@ -324,7 +319,7 @@ class Symmetry:
        # and group symlegs into LHS and RHS.
        all_idx   = range(self.num_symlegs)
        left_idx  = util.cut_unsigned(indices, self.fullsigns) 
-       right_idx = [i for i in all_idx if i not in right_idx]     
+       right_idx = [i for i in all_idx if i not in left_idx]     
 
        # Construct flattened symlabels for LHS and RHS legs: 
        # qLHS[idx] =   sgnL[0] * qL[0,i] + sgnL[1] * qL[1,j] + ...

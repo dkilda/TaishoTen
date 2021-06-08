@@ -11,7 +11,7 @@ from taishoten.util import Str, dictriplet
 from taishoten.util import assertequal
 from taishoten.util import IS, ISNOT, ARE, ARENOT
 
-from taishoten.symmetry import compute_symmetry_contraction
+from taishoten.symmetry import compute_symmetry_contraction, compute_maps
 from taishoten.tensor   import Tensor
 
 
@@ -29,7 +29,7 @@ def symeinsum(subscript, tensA, tensB):
     # Prelims: preprocess subscript, get dense legs from subscript
     subscript = preprocess_subscript(subscript)
     legs      = util.subscript_to_legs(subscript)
-    legs      = dictriplet(legs)
+    legs      = dictriplet(*legs)
 
 
     # (1) Trivial case: no symmetry
@@ -54,12 +54,24 @@ def symeinsum(subscript, tensA, tensB):
 
 
     # (4) Direct contraction not possible, transformations are needed
-    path = trans.find_optimal_transform_path(maps, symlegs)
+    path, final_symlegs = trans.find_transform_path(maps, symlegs)
 
     tensA.transform(path["A"])
     tensB.transform(path["B"])
 
-    arrayC = backend.einsum(full_subscript, tensA.array, tensB.array)
+    full_subscript = make_full_subscript(final_symlegs, legs, truncated=True)
+    arrayC         = backend.einsum(full_subscript, tensA.array, tensB.array)
+
+    print("\nsymlegs: ")
+    for k in symlegs:
+        print(symlegs[k])
+
+    print("\nfinal_symlegs: ")
+    for k in final_symlegs:
+        print(final_symlegs[k])
+
+    print("\nfull_subscript: ", full_subscript)
+    print()
 
     tensC = Tensor(arrayC, symC, backend=backend)
     tensC = tensC.transform(path["C"])
@@ -89,14 +101,17 @@ def preprocess_subscript(subscript):
 
 
 
-def make_full_subscript(symlegs, legs):
+def make_full_subscript(symlegs, legs, truncated=False):
 
     # Construct a full list of legs, both symmetric and dense ones
     full_legs = []
     for key in legs.keys():
 
          ll = legs[key]
-         ss = util.truncate(symlegs[key])
+         ss = symlegs[key] 
+ 
+         if not truncated:
+            ss = util.truncate(ss)
 
          full_legs.append(ss + ll)
 

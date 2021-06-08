@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 
+import sys
+sys.path.insert(0, '..')
+
+import itertools
 import numpy as np
 import taishoten as tn
+
 
 
 def make_symlabels_3D(Gvecs, num_pts):
@@ -52,8 +58,10 @@ A = tn.Tensor(arrayA, sym)
 B = tn.Tensor(arrayB, sym)
 C = tn.symeinsum("ij,jk->ik", A, B)
 
+print("A.shape = {}, B.shape = {}, C.shape = {}".format(A.shape, B.shape, C.shape))
+print("A.shape = {}, B.shape = {}, C.shape = {}".format(A.array.shape, B.array.shape, C.array.shape))
 
-print("Success! C.shape = {}, C.sym.fullsigns = {}".format(C.shape, C.sym.fullsigns)))
+print("Success! C.shape = {}, C.sym.fullsigns = {}".format(C.shape, C.sym.fullsigns))
 
 
 

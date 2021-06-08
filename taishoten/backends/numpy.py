@@ -47,8 +47,8 @@ class NumpyBackend(BaseBackend):
       idx = np.where(abs(array.ravel()) < tol)[0]
       return idx
 
-  def find_nonzeros(self, array):
-      idx = np.where(array.ravel() != 0)[0]
+  def find_nonzeros(self, array, tol):
+      idx = np.where(abs(array.ravel()) > tol)[0]
       return idx
 
 

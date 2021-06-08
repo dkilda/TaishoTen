@@ -111,7 +111,7 @@ class Map:
        # flat_symlabels[idx] = 0 (i.e. all symlabels add up to zero).
        vals      = backend.ones(len(idx))
        map_array = backend.zeros(shape)
-       map_array = backend.put(new_map, idx, vals)
+       map_array = backend.put(map_array, idx, vals)
 
        # Create new map
        return cls(map_array, legs, backend=backend)
@@ -130,7 +130,7 @@ class Map:
 
 
 
-   def contract(self, other, out_legs=None, tol=SYMTOL):
+   def contract(self, other, out_legs=None, tol=None):
 
        # Contract two symmetry maps
        return contract_maps(self, other, out_legs=out_legs, tol=tol)
@@ -140,7 +140,7 @@ class Map:
    def set_legs(self, legs):
 
        # Assert that number of legs is valid
-       msg = "Map.set_legs: number of legs and "\ 
+       msg = "Map.set_legs: number of legs and "\
              "number of dimensions must be equal"
        assertequal(len(legs), self.ndim, msg)
 
@@ -153,11 +153,11 @@ class Map:
 
    @property
    def shape(self):
-       return self._map.shape
+       return self._array.shape
 
    @property
    def ndim(self):
-       return self._map.ndim
+       return self._array.ndim
 
    @property
    def legs(self):
@@ -166,6 +166,10 @@ class Map:
    @property
    def array(self):
        return self._array
+
+   @property
+   def backend(self):
+       return self._backend
 
    # ------------------------------------------------------------------------ #
 

@@ -7,7 +7,7 @@ import helper_lib as lib
 import taishoten as tn
 
 from taishoten import Str
-from .util import TaishoTenTestCase
+from .util import TaishoTenTestCase, must_fail
 
 
 
@@ -45,15 +45,10 @@ class TestMap(TaishoTenTestCase):
        mapC.set_legs(Str("WTYK"))
        assert mapC.legs == Str("WTYK")
 
-       try:
-           mapC.set_legs(Str("KRUPT"))
-       except AssertionError:
-           pass
+       must_fail(mapC.set_legs)(Str("KRUPT"))
+       must_fail(mapC.set_legs)(Str("LPR"))
 
-       try:
-           mapC.set_legs(Str("LPR"))
-       except AssertionError:
-           pass
+
 
  
 

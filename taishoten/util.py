@@ -28,7 +28,7 @@ def assertequal(a, b, msg):
     assert a == b, "{}: a={}, b={}".format(msg, a, b)
 
 
-def assertclose(a, b, msg, rtol=SYMTOL, atol=SYMTOL**2):
+def assertclose(a, b, msg, rtol=2**(-16), atol=2**(-32)):
     assert np.allclose(a, b, rtol=rtol, atol=atol), msg
 
 
@@ -37,7 +37,7 @@ def assertin(x, vals, msg):
 
 
 def assertunique(x, msg):
-    assert_equal(len(x), len(set(x)), msg)
+    assertequal(len(x), len(set(x)), msg)
 
 
 def isiterable(x):
@@ -201,7 +201,7 @@ class Str:
        return self.to_str() >= other.to_str()
 
    def __add__(self, other):
-       out = self.to_set() + other.to_set()
+       out = self.to_set() | other.to_set()
        return type(self)(out)
 
    def __sub__(self, other):  
@@ -320,8 +320,8 @@ def get_from_legs(xs, legs):
 
 def sort_by_legs(xs, reverse=False):
 
-    sorted_xs = sorted(xs,        lambda x:     x.legs)
-    sorted_xs = sorted(sorted_xs, lambda x: len(x.legs), reverse=reverse)
+    sorted_xs = sorted(xs,        key=lambda x:     x.legs)
+    sorted_xs = sorted(sorted_xs, key=lambda x: len(x.legs), reverse=reverse)
     return sorted_xs
 
 
@@ -351,7 +351,7 @@ def sorted_string(x, key=None, reverse=False):
 def signs_to_int(signs):
 
     SIGN = {'+': 1, '-': -1}
-    return (SIGN[s] for s in signs)
+    return [SIGN[s] for s in signs]
 
 
 
@@ -394,7 +394,7 @@ def subscript_to_legs(subscript):
 def legs_to_subscript(*legs):
 
     # Convert list of legs to subscript 
-    subscript = ','.join(str(legs[:-1])) + '->' + str(legs[-1]) 
+    subscript = ','.join(str(l) for l in legs[:-1]) + '->' + str(legs[-1]) 
     return subscript  
 
  
@@ -432,7 +432,7 @@ def cut_unsigned(x, fullsigns, unsigned='0'):
 
 def cut_unsigned_legs(x, fullsigns, unsigned='0'):
 
-    signed_x = ''.join(v for i, v in enumerate(x) \
+    signed_x = ''.join(str(v) for i, v in enumerate(x) \
                                   if fullsigns[i] != unsigned)
     return Str(signed_x)
 
@@ -514,8 +514,11 @@ def zip_shared(a, b):
 
 def get_shared_indices(legsA, legsB):
 
-    idxA = (legsA, range(len(legsA))))
-    idxB = (legsB, range(len(legsB))))    
+    num_legsA = len(legsA)
+    num_legsB = len(legsB)
+
+    idxA = (legsA, range(num_legsA))
+    idxB = (legsB, range(num_legsB))    
 
     shared_idx_AB              = list(zip_shared(idxA, idxB))
     shared_idx_A, shared_idx_B = zip(*shared_idx_AB)

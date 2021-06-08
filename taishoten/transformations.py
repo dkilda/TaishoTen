@@ -31,7 +31,7 @@ def find_transform_path(maps, symlegs):
     # Get all combinations of nodes a, b, c 
     # (corresponding to tensors A, B, C). Try them as final nodes.
     final_nodes = []
-    costs = []
+    costs       = []
 
     for a, b, c in util.cartesian_prod(graph_A.nodes, \
                                        graph_B.nodes, \
@@ -47,20 +47,25 @@ def find_transform_path(maps, symlegs):
             # Get the cost of contracting the final a, b symlegs.
             cost = get_cost(a, b, symleg_dims)
             costs.append(cost)
-            final_nodes.append[(a, b, c)]
+            final_nodes.append((a, b, c))
 
-     # Find the lowest cost combination of final nodes (a,b,c)
-     idx     = costs.index(min(costs))
-     a, b, c = final_nodes[idx] 
+            print("\ntransform, good_to_con: ", good_to_contract(node_legs, num_ind_symlegs))
+            for k in node_legs:
+                print(node_legs[k])
 
-     # Compute transformation pathlets of A,B,C tensors: 
-     # from the initial symlegs combo to the final combo (a,b,c) 
-     pathlet_A = find_transform_pathlet(a)
-     pathlet_B = find_transform_pathlet(b)         
-     pathlet_C = find_transform_pathlet(c, reverse=True)    
+    # Find the lowest cost combination of final nodes (a,b,c)
+    idx     = costs.index(min(costs))
+    a, b, c = final_nodes[idx] 
 
-     path = dictriplet(pathlet_A, pathlet_B, pathlet_C)
-     return path
+    # Compute transformation pathlets of A,B,C tensors: 
+    # from the initial symlegs combo to the final combo (a,b,c) 
+    pathlet_A = find_transform_pathlet(a)
+    pathlet_B = find_transform_pathlet(b)         
+    pathlet_C = find_transform_pathlet(c, reverse=True)    
+
+    path       = dictriplet(pathlet_A, pathlet_B, pathlet_C)
+    final_legs = dictriplet(a.legs, b.legs, c.legs)
+    return path, final_legs 
 
 
 
@@ -117,10 +122,10 @@ def get_num_ind_symlegs(symlegs):
         # There's one dependent leg in each (group containing unvisited legs)
         if  not symlg.issubset(visited_symlegs):
             visited_symlegs = visited_symlegs | symlg
-            num_dep_legs += 1
+            num_dep_symlegs += 1
  
     # Get the number of independent symlegs
-    num_symlegs     = util.get_num_legs(sorted_symlegs)
+    num_symlegs     = util.get_num_legs(*sorted_symlegs)
     num_ind_symlegs = num_symlegs - num_dep_symlegs
     return num_ind_symlegs
     
@@ -134,7 +139,7 @@ def get_symleg_dims(maps):
 
     # Generator that gives dims of all map legs
     def gen_mapleg_dims(maps):
-        for mp in maps.values():
+        for mp in maps:
           for leg, dim in zip(mp.legs, mp.shape):
               yield leg, dim
 
@@ -203,12 +208,12 @@ class TransformGraph:
            maps = util.sort_by_legs(maps)
 
        # Initialize
+       self._symlegs = symlegs
+       self._maps    = maps
+       self._nodes   = []
+       self._legs    = []
        self._num_out_symlegs = self.get_num_out_symlegs()
 
-       self._symlegs = symlegs
-       self._maps  = maps
-       self._nodes = []
-       self._legs  = []
 
 
    def get_num_out_symlegs(self): 
@@ -286,16 +291,17 @@ class TransformGraph:
        # Build a graph of transformation nodes 
 
        # Add the root node to the graph (with initial symlegs)
-       self._nodes = {}
+       self._nodes = []
+       self._legs  = []
        self.add_node(self.symlegs)
 
        # Build children of the root node (layer-1) 
        root = self.get_nodes(0)[0]
-       self.build_children_of(root, maps)
+       self.build_children_of(root)
 
        # Build grandchildren of the root node (layer-2)
        for node in self.get_nodes(1):
-           self.build_children_of(node, maps)
+           self.build_children_of(node)
 
        # We only build two generations of nodes (root, children, 
        # grandchildren) because there are only two generations of maps: 
@@ -307,12 +313,12 @@ class TransformGraph:
 
 
 
-   def build_children_of(self, node, maps): 
+   def build_children_of(self, node): 
  
        # Build children of the input "node" using a list of sorted maps
        node_legs = node.legs
 
-       for mp in maps:
+       for mp in self.maps:
 
            # Map can introduce at most one new leg 
            # --> no valid transformation is possible 
@@ -360,7 +366,7 @@ class TransformGraph:
        for HADAMARD in util.combinations(SHARED, num_hadamard): 
            
            # Get output legs (extra + Hadamard-multiplied) and dot-multiplied legs
-           OUT = HADAMARD + EXTRA
+           OUT = Str(*HADAMARD) + EXTRA
            DOT = ALL - OUT
         
            # If output legs are valid, add a new node. 
@@ -455,12 +461,7 @@ class Node:
        return self.map.array
 
 
-   @property 
-   def map(self):
 
-       if  ISNOT(self.map):
-           return None
-       return self.map
 
 
 
@@ -512,156 +513,3 @@ class Node:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-s

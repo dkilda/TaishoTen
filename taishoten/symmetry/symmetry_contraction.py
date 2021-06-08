@@ -17,6 +17,7 @@ from taishoten.util import IS, ISNOT, ARE, ARENOT
 from .map import Map, contract_maps
 
 
+
 # --- Symmetry contraction class -------------------------------------------- #
 
 def compute_symmetry_contraction(symA, symB, legs):
@@ -179,7 +180,7 @@ class SymmetryContraction:
             return modA
 
        else:
-            msg = "SymmetryContraction.output_mod: "
+            msg = "SymmetryContraction.output_mod: " \
                   "invalid modA = {} or modB = {}".format(modA, modB)
             raise NotImplementedError(msg)
 
@@ -188,7 +189,7 @@ class SymmetryContraction:
    def output_symlabels(self, fullsigns):
 
        # Make symmetric legs for C using the new full signs
-       self.make_symlegs("C", fullsigns)
+       self._make_symlegs("C", fullsigns)
 
        # Legs and their symlabels for A and B, legs of C
        symlabels_A = (self.symlegs("A"), self.sym("A").symlabels)
@@ -206,8 +207,8 @@ class SymmetryContraction:
 
        # Multiply full signs of A by the relative phase, 
        # to make A and B leg directions compatible
-       fullsigns_A = phased_signs(self.sym("A").fullsigns, self.phase)   
-       fullsigns_B =              self.sym("B").fullsigns
+       fullsigns_A = util.phased_signs(self.sym("A").fullsigns, self.phase)   
+       fullsigns_B =                   self.sym("B").fullsigns
 
        # Legs and their full signs for A and B, legs of C
        fullsigns_A = (self.legs("A"), fullsigns_A)
@@ -254,7 +255,7 @@ class SymmetryContraction:
             return _align(symlabels_A, folded_symlabels_B)
 
        else:
-            msg = "SymmetryContraction.align_symlabels: "
+            msg = "SymmetryContraction.align_symlabels: " \
                   "invalid modA = {} or modB = {}".format(modA, modB)
             raise NotImplementedError(msg)
             
@@ -382,8 +383,7 @@ def compute_pairwise_contractions_of_maps(maps):
             continue
 
         # Contract mapI and mapJ --> gives a new map
-        subscript = util.legs_to_subscript(mapI.legs, mapJ.legs, OUT)
-        new_map   = contract_maps(subscript, mapI, mapJ) 
+        new_map = contract_maps(mapI, mapJ, OUT) 
 
         # Add the new map and its legs to the map list
         maps.append(new_map)
