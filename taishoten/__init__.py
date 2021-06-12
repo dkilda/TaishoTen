@@ -6,7 +6,8 @@ from . import transformations
 from . import util
 
 from .util      import Str, dictriplet
-from .tensor    import Tensor
+from .util      import subscript_to_legs, legs_to_subscript
+from .tensor    import Tensor, random
 from .symeinsum import symeinsum
 
 from .symmetry import SymmetryContraction

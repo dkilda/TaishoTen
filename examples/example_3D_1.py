@@ -7,7 +7,10 @@ sys.path.insert(0, '..')
 
 import itertools
 import numpy as np
+import numpy.testing as nptest
+
 import taishoten as tn
+from taishoten import Str
 
 
 
@@ -46,23 +49,32 @@ dim   = 10
 shape = (nkpts, dim, dim)
 
 
-# Setup symmetries and arrays
+# Setup symmetries and tensors
 sym = tn.Symmetry3D("+-", [kpts]*2, mod=gvecs)
 
-arrayA = np.random.randn(*shape)
-arrayB = np.random.randn(*shape)
+np.random.seed(1)
+A = tn.random(shape, sym)
+B = tn.random(shape, sym)
 
 
 # Do symmetric einsum
-A = tn.Tensor(arrayA, sym)
-B = tn.Tensor(arrayB, sym)
 C = tn.symeinsum("ij,jk->ik", A, B)
+
+mapC   = tn.Map.compute(C.sym, Str("IK"))
+arrayC = np.einsum("IJij,JKjk->IKik", A.get_full_array(), B.get_full_array())
+arrayC = np.einsum("IKik,IK->Iik", arrayC, mapC.array)
+
 
 print("A.shape = {}, B.shape = {}, C.shape = {}".format(A.shape, B.shape, C.shape))
 print("A.shape = {}, B.shape = {}, C.shape = {}".format(A.array.shape, B.array.shape, C.array.shape))
 
 print("Success! C.shape = {}, C.sym.fullsigns = {}".format(C.shape, C.sym.fullsigns))
 
+print("assert arrays       equal: ", nptest.assert_allclose(C.array, arrayC, rtol=1e-6, atol=1e-12))
+print("assert array shapes equal: ", C.array.shape, arrayC.shape)
+
+diff = np.linalg.norm(C.array - arrayC) / np.sqrt(arrayC.size)
+print("assert array diff norm: ", diff < 1e-8, diff)
 
 
 

@@ -24,7 +24,7 @@ class Tensor:
       self._sym     = sym
       self._array   = self.backend.asarray(array) 
 
-      if   sym is None: 
+      if   ISNOT(sym): 
    
            # No symmetry: treat as a dense tensor
            self._ndim        = array.ndim
@@ -35,88 +35,81 @@ class Tensor:
            self._ndim        = sym.num_legs
            self._dense_shape = array.shape[-sym.num_legs : ] 
 
-           # Symmetrized form of input array
-           self._array = self.get_symmetrized_array(array)
+
+  @classmethod
+  def create(cls, *args, **kwargs):
+
+      # Create a new tensor
+      tensor = cls(*args, **kwargs)
+
+      # Check tensor symmetry is consistent with tensor array dims
+      sym = tensor.sym
+      arr = tensor.array
+
+      if IS(sym):
+
+         # Check ndim of array matches truncated ndim
+         msg = "Tensor: invalid ndim of input array"
+ 
+         trunc_arr_ndim = 2*tensor.ndim - 1
+         assertequal(arr.ndim, trunc_arr_ndim, msg)
+
+         # Check array shape is consistent with symmetric shape
+         msg = "Tensor.create: array and symmetry truncated shapes must match"
+
+         arr_shape = arr.shape[: sym.num_symlegs - 1]
+         sym_shape = sym.truncated_shape
+         assertequal(arr_shape, sym_shape, msg)
+         
+      # Symmetrize tensor
+      tensor.symmetrize()
+      return tensor
+
 
 
   # --- Auxiliary methods --------------------------------------------------- #
 
-  def as_new_tensor(self, array=None, sym=None):
+  def as_new(self, array=None, sym=None):
 
       # Create a new Tensor object
-      if  array is None:
+      if  ISNOT(array):
           array = self._array
 
-      if  sym is None:
+      if  ISNOT(sym):
           sym = self._sym
 
       return type(self)(array, sym)
 
 
 
-  def _make_transform_legs(self): 
+  def _make_legs(self):
 
       # Make dense and symmetric legs (ndim = num of dense legs)
-      denselegs = util.make_legs(self.ndim)
-      symlegs   = util.make_symlegs(denselegs, self.sym.fullsigns)      
+      denselegs     = util.make_legs(self.ndim)
+      symlegs       = util.make_symlegs(denselegs, self.sym.fullsigns) 
+      trunc_symlegs = util.truncate(symlegs)
 
-      # Construct legs of the full form (e.g. ABab), 
-      # the truncated form (e.g. Aab), and the map (e.g. AB)
-      full_legs  = symlegs + denselegs
-      trunc_legs = util.truncate(symlegs) + denselegs
-      map_legs   = symlegs
-
-      return full_legs, trunc_legs, map_legs
-
-      
-
-  def get_symmetrized_array(self, array): 
-
-      # Get symmetrized/truncated form of input array 
-      # (only truncate if array.ndim > truncated array ndim)
-
-      # Shortcut
-      sym = self.sym
-
-      # The ndim of truncated input array
-      trunc_array_ndim = 2*self.ndim - 1
-
-      # Check symmetry is consistent with array dims
-      if   array.ndim == trunc_array_ndim:
-
-           msg = "Tensor.get_symmetrized_array: "\
-                 "array and symmetry truncated shapes must match"
-
-           arr_shape = array.shape[: sym.num_symlegs - 1]
-           assertequal(arr_shape, sym.truncated_shape, msg)
-
-      elif array.ndim == trunc_array_ndim + 1:
-
-           msg = "Tensor.get_symmetrized_array: "\
-                 "array and symmetry shapes must match"
-
-           arr_shape = array.shape[: sym.num_symlegs]
-           assertequal(arr_shape, sym.shape, msg)
-
-      else:
-           msg = "Tensor.get_symmetrized_array: "\
-                 "invalid ndim = {} of input array".format(array.ndim)
-           raise ValueError(msg)
+      return denselegs, symlegs, trunc_symlegs      
 
 
-      # Input already truncated: trivial return
-      if  array.ndim == trunc_array_ndim:
-          return array
 
-      # Make full-to-truncated subscript (e.g. ABab,AB->Aab)
-      full_legs, trunc_legs, map_legs = self._make_transform_legs()           
-      subscript = util.legs_to_subscript(full_legs, map_legs, trunc_legs) 
+  def symmetrize(self):
 
-      # Compute map from sym, compute symmetrized array 
-      new_map = Map.compute(sym, map_legs, self.backend)
-      array   = self.backend.einsum(subscript, array, new_map.array)
+      # Make legs
+      denselegs, symlegs, trunc_symlegs = self._make_legs()    
+      trunc_legs = trunc_symlegs + denselegs
 
-      return array
+      # Get map from symmetry
+      mp = self.get_map(symlegs) 
+  
+      # Compute map squared (e.g. AB,AB->A)
+      sub = util.legs_to_subscript(symlegs, symlegs, trunc_symlegs) 
+      mp_squared_array = self.backend.einsum(sub, mp.array, mp.array)    
+
+      # Compute symmetrized array (e.g. Aab,A->Aab)
+      sub = util.legs_to_subscript(trunc_legs, trunc_symlegs, trunc_legs) 
+      self._array = self.backend.einsum(sub, self.array, mp_squared_array)
+      return self
 
 
 
@@ -124,23 +117,29 @@ class Tensor:
 
       # If no symmetry
       if  ISNOT(self.sym):
-          return self._array
+          return self.array
 
+      # Make legs
+      denselegs, symlegs, trunc_symlegs = self._make_legs() 
+      
       # Make truncated-to-full subscript (e.g. Aab,AB->ABab)
-      full_legs, trunc_legs, map_legs = self._make_transform_legs()           
-      subscript = util.legs_to_subscript(trunc_legs, map_legs, full_legs) 
+      full_legs  = symlegs       + denselegs
+      trunc_legs = trunc_symlegs + denselegs
+      subscript  = util.legs_to_subscript(trunc_legs, symlegs, full_legs) 
 
-      # Compute map from sym, compute full array (no hidden legs)
-      new_map    = Map.compute(self.sym, map_legs, self.backend)
-      full_array = self.backend.einsum(subscript, self._array, new_map.array)
+      # Get map from symmetry
+      mp = self.get_map(symlegs) 
+
+      # Compute full array (no hidden legs)
+      full_array = self.backend.einsum(subscript, self.array, mp.array)
       return full_array
 
 
 
   # --- Transformation methods ---------------------------------------------- #
 
-  def transform(self, path):
-      return transform(self, path)
+  def transform(self, *args, **kwargs):
+      return transform(self, *args, **kwargs)
 
 
 
@@ -183,20 +182,23 @@ class Tensor:
   def get_dense_dims(self, legs):
       return {leg: dim for leg, dim in zip(legs, self.dense_shape)}
 
+  def get_map(self, map_legs):
+      return Map.compute(self.sym, map_legs, self.backend)
+
   # ------------------------------------------------------------------------- #
 
 
 
 
 
-def transform(tensor, path):  
+def transform(tensor, path, denselegs=None):  
 
     # Num of transformation nodes
     num_nodes = len(path) 
 
     # (1) Trivial case: path with no transformations
     if  num_nodes == 0:
-        return tensor.as_new_tensor()
+        return tensor.as_new()
 
     # (2) Construct a list of symlegs and maps for transformation einsum
     symlegs    = []  
@@ -216,9 +218,10 @@ def transform(tensor, path):
         if  i == num_nodes - 1:
             symlegs += [node.end_legs]
 
-    # (3) Generate dummy dense legs, combine them with symlegs list   
+    # (3) Combine dense legs with symmetric legs list   
     #     (maps have no dense legs, only initial and final tensors do)
-    denselegs = util.make_legs(tensor.ndim)
+    if ISNOT(denselegs):
+       denselegs = util.make_legs(tensor.ndim)
 
     legs     = symlegs
     legs[0]  = symlegs[0]  + denselegs
@@ -230,12 +233,17 @@ def transform(tensor, path):
     # (5) Contract tensor with all the transformation maps
     backend   = tensor.backend
     new_array = backend.einsum(subscript, tensor.array, *map_arrays)
-    return tensor.as_new_tensor(new_array)                             
+    return tensor.as_new(new_array)                             
   
 
 
+def random(shape, sym=None, backend=None, **kwargs):
 
+    backend = backends.get_backend(backend)
+    array   = backend.random(shape)
 
+    return Tensor.create(array, sym, backend, **kwargs)
+    
 
 
 

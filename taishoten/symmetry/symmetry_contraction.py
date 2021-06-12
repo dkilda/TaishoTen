@@ -290,9 +290,11 @@ def compute_aux_symmetry(symcon):
     signs = \
          ''.join(symA.signs[i]     for i in shared_idx_A) + '-'
     symlabels = [symA.symlabels[i] for i in shared_idx_A] + [aux_symlabels]
+    
+    mod = symA.mod if IS(symA.mod) else symB.mod
 
     # Construct the auxiliary symmetry defining an auxiliary tensor/map
-    aux_sym = symcon.type(signs, symlabels)
+    aux_sym = symcon.type(signs, symlabels, 0, mod)
     return aux_sym
 
 
@@ -348,7 +350,7 @@ def compute_maps(symcon, backend=None):
 
         # Create auxiliary map representing the auxiliary symmetry
         add_map(aux_sym, aux_maplegs) 
-
+        
     # Calculate all pairwise contractions of A, B and auxiliary maps: gives 
     # a complete list of maps required for all possible symleg transformations
     maps = compute_pairwise_contractions_of_maps(maps)

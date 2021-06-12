@@ -17,8 +17,6 @@ from taishoten.tensor   import Tensor
 
 
 
-
-
 def symeinsum(subscript, tensA, tensB):
 
     # Prelims: get backend
@@ -56,26 +54,14 @@ def symeinsum(subscript, tensA, tensB):
     # (4) Direct contraction not possible, transformations are needed
     path, final_symlegs = trans.find_transform_path(maps, symlegs)
 
-    tensA.transform(path["A"])
-    tensB.transform(path["B"])
+    tensA = tensA.transform(path["A"], legs["A"])
+    tensB = tensB.transform(path["B"], legs["B"])
 
     full_subscript = make_full_subscript(final_symlegs, legs, truncated=True)
     arrayC         = backend.einsum(full_subscript, tensA.array, tensB.array)
 
-    print("\nsymlegs: ")
-    for k in symlegs:
-        print(symlegs[k])
-
-    print("\nfinal_symlegs: ")
-    for k in final_symlegs:
-        print(final_symlegs[k])
-
-    print("\nfull_subscript: ", full_subscript)
-    print()
-
     tensC = Tensor(arrayC, symC, backend=backend)
-    tensC = tensC.transform(path["C"])
-
+    tensC = tensC.transform(path["C"], legs["C"])
     return tensC
 
 

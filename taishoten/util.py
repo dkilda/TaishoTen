@@ -3,6 +3,7 @@
 import numpy as np
 import copy  as cp
 import itertools
+import collections
 
 
 
@@ -92,13 +93,13 @@ class Str:
 
    def __init__(self, *args, **kwargs):
 
-       # Initialize StrSet
+       # Initialize Str
        self._initialize(*args, **kwargs)
 
 
    def __call__(self, *args, **kwargs):
 
-       # Update StrSet
+       # Update Str
        self._initialize(*args, **kwargs)
        return self
 
@@ -201,7 +202,8 @@ class Str:
        return self.to_str() >= other.to_str()
 
    def __add__(self, other):
-       out = self.to_set() | other.to_set()
+       out = self.to_str() + other.to_str()
+       out = unique_string(out) 
        return type(self)(out)
 
    def __sub__(self, other):  
@@ -343,6 +345,11 @@ def to_string(x):
 
 def sorted_string(x, key=None, reverse=False):
     return ''.join(sorted(x, key=key, reverse=reverse))
+
+
+
+def unique_string(x):
+    return ''.join(collections.OrderedDict.fromkeys(x).keys())
 
 
 

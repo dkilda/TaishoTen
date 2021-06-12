@@ -19,7 +19,7 @@ class NumpyBackend(BaseBackend):
       return np.asarray(array, *args, **kwargs)
 
   def zeros(self, shape):
-      return np.ones(shape)
+      return np.zeros(shape)
 
   def ones(self, shape):
       return np.ones(shape)

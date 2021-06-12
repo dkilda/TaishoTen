@@ -49,10 +49,6 @@ def find_transform_path(maps, symlegs):
             costs.append(cost)
             final_nodes.append((a, b, c))
 
-            print("\ntransform, good_to_con: ", good_to_contract(node_legs, num_ind_symlegs))
-            for k in node_legs:
-                print(node_legs[k])
-
     # Find the lowest cost combination of final nodes (a,b,c)
     idx     = costs.index(min(costs))
     a, b, c = final_nodes[idx] 
@@ -366,7 +362,7 @@ class TransformGraph:
        for HADAMARD in util.combinations(SHARED, num_hadamard): 
            
            # Get output legs (extra + Hadamard-multiplied) and dot-multiplied legs
-           OUT = Str(*HADAMARD) + EXTRA
+           OUT = Str(HADAMARD) | EXTRA
            DOT = ALL - OUT
         
            # If output legs are valid, add a new node. 
