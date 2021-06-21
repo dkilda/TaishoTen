@@ -20,13 +20,10 @@ def find_transform_path(maps, symlegs):
     symleg_dims     = get_symleg_dims(maps)
     num_ind_symlegs = get_num_ind_symlegs(symlegs)
 
-    # Sort the maps by the length of their symlegs 
-    sorted_maps = util.sort_by_legs(maps)
-
     # Build complete transformation node lists for A, B, C tensors
-    graph_A = build_transform_graph(symlegs["A"], sorted_maps) 
-    graph_B = build_transform_graph(symlegs["B"], sorted_maps)
-    graph_C = build_transform_graph(symlegs["C"], sorted_maps)
+    graph_A = build_transform_graph(symlegs["A"], maps) 
+    graph_B = build_transform_graph(symlegs["B"], maps)
+    graph_C = build_transform_graph(symlegs["C"], maps)
     
     # Get all combinations of nodes a, b, c 
     # (corresponding to tensors A, B, C). Try them as final nodes.
@@ -61,6 +58,7 @@ def find_transform_path(maps, symlegs):
 
     path       = dictriplet(pathlet_A, pathlet_B, pathlet_C)
     final_legs = dictriplet(a.legs, b.legs, c.legs)
+
     return path, final_legs 
 
 
@@ -98,6 +96,7 @@ def good_to_contract(symlegs, num_ind_symlegs=None):
     # 
     # (2) output legs \in input legs: 
     #     output does not have any new legs not present in the input
+
     is_contractable = (len(IN) == num_ind_symlegs) and OUT.issubset(IN) 
     return is_contractable                              
                                
@@ -199,15 +198,18 @@ class TransformGraph:
        # Truncate symlegs input
        symlegs = util.truncate(symlegs)
 
-       # Sort maps if not sorted
-       if  isinstance(maps, dict):
-           maps = util.sort_by_legs(maps)
+       # Sort the maps by the length of their symlegs 
+       maps = util.sort_by_legs(maps)
 
        # Initialize
        self._symlegs = symlegs
        self._maps    = maps
        self._nodes   = []
+
+       maplegs       = util.get_legs(self.maps)
+       self._maplegs = util.sort([ll.sorted() for ll in maplegs])
        self._legs    = []
+
        self._num_out_symlegs = self.get_num_out_symlegs()
 
 
@@ -250,7 +252,11 @@ class TransformGraph:
 
    @property
    def legs(self):
-       return util.sort(self._legs)
+       return self._legs 
+
+   @property 
+   def maplegs(self):
+       return self._maplegs 
 
    @property
    def nodes(self):
@@ -277,8 +283,11 @@ class TransformGraph:
    def add_node(self, *args, **kwargs):
 
        node = Node(*args, **kwargs)
+       legs = node.legs
+
        self._nodes.append(node)
-       self._legs.append(node.legs)
+       self._legs.append(legs.sorted())
+       self._legs = util.sort(self._legs)
        return self
 
 
@@ -376,8 +385,8 @@ class TransformGraph:
            # 
            # -- independent legs are missing from the output
            #    (if more than one leg is summed out) 
-           if  OUT not in self.legs and \
-               OUT not in map_legs  and len(DOT) <= 1:
+           if  OUT not in self.legs    and \
+               OUT not in self.maplegs and len(DOT) <= 1:
 
                self.add_node(OUT, mp, node)
 

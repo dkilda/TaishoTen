@@ -1,142 +1,338 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import unittest
+import pytest
 import numpy as np
 import helper_lib as lib
+
+import util
+from util import isiterable,  noniterable
+
 import taishoten as tn
-
 from taishoten import Str
-from .util import TaishoTenTestCase, must_fail
 
 
 
-class TestMap(TaishoTenTestCase):
 
+def make_random_map(legs, shape, num_elems):
 
-   def test_construct(self):
+    array, idx = lib.random_map_from_idx(shape, num_elems)
+    random_map = tn.Map(array, legs)
 
-       def _test(legs, shape, num_elems):
+    data = {"legs": legs, "shape": shape, \
+            "idx": idx, "array": array}
 
-           array = lib.random_map_from_idx(shape, num_elems)[0]
-           out = tn.Map(array, legs)  
-     
-           self.assertMapVsArray(out, Str(legs), array)
-           self.assertMap(out, Str(legs), shape)
-
-       np.random.seed(1)
-
-       _test(Str("IJK"),  (2,3,4),   5)
-       _test("MI",        (3,2),     2)
-       _test(Str("UJIW"), (5,3,2,5), 10)
+    return random_map, data
 
 
 
-   def test_set_legs(self):
 
-       np.random.seed(1)
+@pytest.fixture
+def random_maps():
 
-       mapA = lib.create_random_map(Str("IJK"),  (2,3,4),   5)
-       mapC = lib.create_random_map(Str("UJIW"), (5,3,2,5), 10)
+    dct = {}
+    def make(key):
+        def _make(*args, **kwargs):  
+            dct[key] = make_random_map(*args, **kwargs)
+        return _make
 
-       mapA.set_legs("UML")
-       assert mapA.legs == Str("UML")
+    np.random.seed(1)
 
-       mapC.set_legs(Str("WTYK"))
-       assert mapC.legs == Str("WTYK")
+    make(0)(Str("IJK"),  (2,3,4),   5)
+    make(1)(Str("MI"),   (3,2),     2)
+    make(2)(Str("UJIW"), (5,3,2,5), 12)
 
-       must_fail(mapC.set_legs)(Str("KRUPT"))
-       must_fail(mapC.set_legs)(Str("LPR"))
-
-
-
- 
-
-   def test_copy(self):
-
-       np.random.seed(1)
-
-       ans = lib.create_random_map(Str("IJK"), (2,3,4), 5)[0]
-       out = ans.copy()
-       self.assertEqualMap(out, ans)
+    return dct
 
 
 
-   def test_compute_from_idx(self):
-
-       def _test(legs, shape, num_elems):
-
-           array, idx = lib.random_map_from_idx(shape, num_elems)
-           ans = tn.Map(array, legs)   
-           out = tn.Map.compute_from_idx(shape, idx, legs)
-
-           self.assertEqualMap(out, ans)
-           self.assertMapVsArray(out, legs, array)
-           self.assertMap(out, legs, shape)
-
-       np.random.seed(1)
-  
-       _test(Str("IJK"),  (2,3,4),   5)
-       _test("MI",        (3,2),     2)
-       _test(Str("UJIW"), (5,3,2,5), 10)
 
 
- 
-   def test_compute(self):
+def make_symmetry_1D(fullsigns, symlabels, qtot=0, mod=None, signs=None):
 
-       def _test(legs, fullsigns, symlabels, qtot=0, mod=None):
+    sym  = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
 
-           array = lib.map_from_sym(fullsigns, symlabels, qtot=qtot, mod=mod)
-           ans   = tn.Map(array, legs)
+    data = {"fullsigns": fullsigns, "signs": signs, \
+            "symlabels": symlabels, "qtot": qtot, "mod": mod}
 
-           sym = tn.Symmetry1D(fullsigns, symlabels, qtot=qtot, mod=mod) 
-           out = tn.Map.compute(sym, legs)
-
-           self.assertEqualMap(out, ans)
-           self.assertMapVsArray(out, legs, array)
-           self.assertMap(out, legs, sym.shape)
-
-       Si = np.arange(0,4)
-       Sj = np.arange(1,3)
-       Sk = np.arange(2,5)
-       Sl = np.arange(0,2)
-       Sm = np.arange(0,3)
-       Sn = np.arange(1,5)
-
-       _test("IJKL", "--+-", [Si,Sj,Sk,Sl])
-       _test("MLN",  "++-",  [Sm,Sl,Sn])
-       _test("MLN",  "++-",  [Sm,Sl,Sn], qtot=2, mod=3)
+    return sym, data
 
 
 
-   def test_contract_maps(self):
 
-       def _test(A, B, legsC, shapeC):
+@pytest.fixture
+def symmetries1D():
+    
+    Si = np.arange(0,4)
+    Sj = np.arange(1,3)
+    Sk = np.arange(2,5)
+    Sl = np.arange(0,2)
+    Sm = np.arange(0,3)
+    Sn = np.arange(1,5)
 
-           out   = tn.contract_maps(A, B, legsC)  
-           out1  = A.contract(B, legsC)
+    dct = {}
+    def make(key):
+        def _make(*args, **kwargs):  
+            dct[key] = make_symmetry_1D(*args, **kwargs)
+        return _make
 
-           arrayC = np.einsum(subscript, A.array, B.array)
-           ans    = tn.Map(arrayC, legsC)
+    make("A1")("--+-",  [Si,Sj,Sk,Sl])
+    make("B1")("++-",   [Sm,Sl,Sn])
+    make("B2")("++-",   [Sm,Sl,Sn], qtot=2, mod=3)
+    make("B3")("+0+0-", [Sm,Sl,Sn])
+    
+    return dct
 
-           self.assertEqualMap(out,  ans)
-           self.assertEqualMap(out1, ans)
 
-           self.assertMapVsArray(out,  legsC, arrayC)
-           self.assertMapVsArray(out1, legsC, arrayC)
 
-           self.assertMap(out,  legsC, shapeC)
-           self.assertMap(out1, legsC, shapeC)
+    
 
-       np.random.seed(1)
+class TestMap:
 
-       A = lib.create_random_map("IJK",  (2,3,4),   5)
-       B = lib.create_random_map("MI",   (3,2),     2)
-       C = lib.create_random_map("UJIW", (5,3,2,5), 10)
+   @pytest.fixture(autouse=True)
+   def request_random_maps_and_data(self, random_maps):
+       self._random_maps_and_data = random_maps
 
-       _test(A, B, "JKM",  (3,4,3))
-       _test(A, C, "IKUW", (2,4,5,5))
-       _test(C, A, "JUWK", (3,5,5,4))
+
+
+
+   def random_maps_and_data(self, key):
+       mp, data = self._random_maps_and_data[key]
+       return mp, data
+
+
+
+
+   def random_maps(self, key):
+       mp, _ = self._random_maps_and_data[key]
+       return mp
+
+
+
+
+   @pytest.mark.parametrize("key", [0,1,2])
+   def test_construct(self, key):
+
+       mp, data = self.random_maps_and_data(key)
+       
+       legs  = data["legs"]
+       shape = data["shape"]
+       array = data["array"]
+
+       util.assert_map_vs_array(mp, legs, array)
+       util.assert_map(mp, legs, shape)
+
+
+
+
+   @pytest.mark.parametrize("key, legs", [[0, Str("UML")], \
+                                          [2, Str("WTYK")]])
+   def test_set_legs(self, key, legs):
+
+       mp = self.random_maps(key)
+       mp._set_legs(legs)
+       assert mp.legs == legs
+
+
+
+
+   @pytest.mark.parametrize("key, legs", [[2, Str("KRUPT")], \
+                                          [2, Str("LPR")]])
+   @pytest.mark.xfail
+   def test_set_legs_failed(self, key, legs):
+
+       mp = self.random_maps(key)
+       mp._set_legs(legs)
+
+
+
+
+   @pytest.mark.parametrize("key", [0])
+   def test_copy(self, key):
+
+       mp  = self.random_maps(key)
+       out = mp.copy()
+       util.assert_map_equal(out, mp)
+
+
+
+
+   @pytest.mark.parametrize("key", [0,1,2])
+   def test_compute_from_idx(self, key):
+
+       mp, data = self.random_maps_and_data(key)
+
+       legs  = data["legs"]
+       shape = data["shape"]
+       array = data["array"]
+       idx   = data["idx"]
+
+       out = tn.Map.compute_from_idx(shape, idx, legs)
+
+       util.assert_map_equal(out, mp)
+       util.assert_map_vs_array(out, legs, array)
+       util.assert_map(out, legs, shape)
+
+
+
+
+   @pytest.mark.parametrize("key, legs", [["A1", Str("IJKL")], \
+                                          ["B1", Str("MLN")],  \
+                                          ["B2", Str("MLN")],  \
+                                          ["B3", Str("MLN")]])
+   def test_compute(self, symmetries1D, key, legs):
+
+       sym, _ = symmetries1D[key]
+       out    = tn.Map.compute(sym, legs)
+
+       array = lib.map_from_sym(sym.signs, sym.symlabels, \
+                                qtot=sym.qtot, mod=sym.mod)
+       ans = tn.Map(array, legs)
+
+       util.assert_map_equal(out, ans)
+       util.assert_map_vs_array(out, legs, array)
+       util.assert_map(out, legs, sym.shape)
+
+
+
+
+   @pytest.mark.parametrize("keyA, keyB, legsC, shapeC",     \
+                            [                                \
+                             [0, 1, Str("JKM"),  (3,4,3)],   \
+                             [0, 2, Str("IKUW"), (2,4,5,5)], \
+                             [2, 0, Str("JUWK"), (3,5,5,4)], \
+                            ])
+   @pytest.mark.parametrize("which_method", [0,1])
+   def test_contract_maps(self, keyA, keyB, legsC, shapeC, which_method):
+
+       A = self.random_maps(keyA)
+       B = self.random_maps(keyB)
+
+       def contract(A, B, legsC):
+           if   which_method == 0:
+                return tn.contract_maps(A, B, legsC)
+           else:
+                return A.contract(B, legsC)
+
+       out = contract(A, B, legsC)
+
+       legsA     = A.legs
+       legsB     = B.legs
+       subscript = tn.legs_to_subscript(legsA, legsB, legsC)
+
+       tmp    = np.einsum(subscript, A.array, B.array)
+       idx    = lib.find_nonzeros(tmp)
+       arrayC = lib.map_from_idx(shapeC, idx, val=1.0)
+       ans    = tn.Map(arrayC, legsC)
+
+       util.assert_map(out, legsC, shapeC)
+       util.assert_map_vs_array(out, legsC, arrayC)
+       util.assert_map_equal(out, ans)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

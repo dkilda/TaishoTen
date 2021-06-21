@@ -63,7 +63,7 @@ class Map:
        # If symmetry "sym" already has a map, simply return that map
        if  sym.has_map:
            new_map = sym.map.copy() 
-           new_map.set_legs(legs)
+           new_map._set_legs(legs)
            return new_map
 
        # Flatten out symshape by combining all symlegs into one, which gives
@@ -136,17 +136,22 @@ class Map:
        return contract_maps(self, other, out_legs=out_legs, tol=tol)
 
 
+   # --- Private auxiliary methods ------------------------------------------ #
 
-   def set_legs(self, legs):
+   def _set_legs(self, legs):
+
+       # Private method: nothing from outside can modify the map 
+       # (i.e. once created, map is an immutable object)
 
        # Assert that number of legs is valid
-       msg = "Map.set_legs: number of legs and "\
+       msg = "Map._set_legs: number of legs and "\
              "number of dimensions must be equal"
        assertequal(len(legs), self.ndim, msg)
 
        # Set map legs
        self._legs = Str(legs)
        return self
+
 
 
    # --- Properties --------------------------------------------------------- #

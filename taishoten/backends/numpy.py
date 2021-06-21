@@ -55,7 +55,7 @@ class NumpyBackend(BaseBackend):
   # --- Calculations ----------------------------------------------------------
   
   def norm(self, *args, **kwargs):
-      return np.norm(*args, **kwargs)
+      return np.linalg.norm(*args, **kwargs)
 
   def dot(self, *args, **kwargs):
       return np.dot(*args, **kwargs)

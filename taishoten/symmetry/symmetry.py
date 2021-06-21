@@ -312,14 +312,11 @@ class Symmetry:
 
 
 
-   def aux_symlabels(self, indices, phase=1): 
+   def aux_symlabels(self, left_idx, phase=1): 
 
-       # The "indices" specifies legs to be put on LHS of conservation law 
-       # equation. We convert "indices" from all-indices to signed-indices 
-       # and group symlegs into LHS and RHS.
-       all_idx   = range(self.num_symlegs)
-       left_idx  = util.cut_unsigned(indices, self.fullsigns) 
-       right_idx = [i for i in all_idx if i not in left_idx]     
+       # The "left_idx" specifies legs to be put on LHS of conservation law 
+       # equation (we'll group symlegs into LHS and RHS).
+       right_idx = [i for i in range(self.num_symlegs) if i not in left_idx]
 
        # Construct flattened symlabels for LHS and RHS legs: 
        # qLHS[idx] =   sgnL[0] * qL[0,i] + sgnL[1] * qL[1,j] + ...

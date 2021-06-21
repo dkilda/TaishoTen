@@ -1,611 +1,624 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import unittest
+import pytest
+import copy  as cp
 import numpy as np
 import helper_lib as lib
+
+import util
+from util import isiterable, noniterable
+
 import taishoten as tn
-
 from taishoten import Str
-from .util     import TaishoTenTestCase, must_fail
-from .         import util
 
 
-class TestSymmetryContraction(TaishoTenTestCase):
+
+def np_einsum_of_maps(subscript, legsC, mapA, mapB):
+
+    arrayC = np.einsum(subscript, mapA.array, mapB.array)
+    idx    = lib.find_nonzeros(arrayC)
+    arrayC = lib.map_from_idx(arrayC.shape, idx, val=1.0)
+    out    = tn.Map(arrayC, legsC)
+    return out
+
+
+
+
+
+def make_aux_symlabels(sym, symindices, phase=1):
+
+    signs     = [[], []]
+    symlabels = [[], []]
+    qtot      = sym.qtot
+    mod       = sym.mod
+
+    for k in (0,1):
+      for i in symindices[k]:
+          signs[k].append(sym.signs[i])
+          symlabels[k].append(sym.symlabels[i])
+
+    for k in (0,1):
+        signs[k] = ''.join(signs[k])
+
+    aux_symlabels = lib.make_aux_symlabels(signs, symlabels, \
+                                           qtot, mod, phase=phase)
+
+    return aux_symlabels
+
+
+
+
+def make_symmetry_1D(fullsigns, symlabels, qtot=0, mod=None, signs=None):
+
+    sym  = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
+
+    data = {"fullsigns": fullsigns, "signs": signs, \
+            "symlabels": symlabels, "qtot": qtot, "mod": mod}
+
+    return sym, data
+
+
+
+
+@pytest.fixture
+def symlabels1D():
+
+    Si = np.arange(0,5) 
+    Sj = np.arange(0,2)
+    Sk = np.arange(1,5)
+    Sl = np.arange(0,4)
+    Sm = np.arange(1,5)
+    Sn = np.arange(0,5)
+    So = np.arange(0,2)
+    Sp = np.arange(0,5)
+
+    symlabels = [Si,Sj,Sk,Sl,Sm,Sn,So,Sp]
+    symlabels = dict(zip("ijklmnop", symlabels))
+    return symlabels
+
+
+
+
+@pytest.fixture
+def symmetries1D(symlabels1D):
+    
+    dct = {}
+    def make(legs, fullsigns, suffix=None, **kwargs):
+
+        symlabels = [symlabels1D[l] for l in legs if l in symlabels1D]
+        symlegs   = ''.join(l       for l in legs if l in symlabels1D)
+        symlegs   = symlegs.upper()
+
+        sym, data = make_symmetry_1D(fullsigns, symlabels, **kwargs)
+
+        key = ",".join([legs, fullsigns]) 
+        if  suffix:
+            key = ",".join([key, suffix]) 
+
+        dct[key]  = (sym, data, Str(legs), Str(symlegs))
+
+
+    make("ijk", "++-")
+    make("ijk", "++-", suffix="M2",            mod=2)
+    make("ijk", "++-", suffix="M3",            mod=3)
+    make("ijk", "++-", suffix="Q1,M3", qtot=1, mod=3)
+
+    make("klm", "++-")
+    make("klm", "++-", suffix="M3",            mod=3)
+    make("klm", "++-", suffix="M5",            mod=5)
+    make("klm", "++-", suffix="Q2,M3", qtot=2, mod=3)
+    make("klm", "-+-", suffix="Q2,M3", qtot=2, mod=3)
+
+    make("ijlm", "+++-")
+    make("ijlm", "+++-", suffix="M2",            mod=2)
+    make("ijlm", "+++-", suffix="M3",            mod=3)
+    make("ijlm", "+++-", suffix="M5",            mod=5)
+    make("ijlm", "+++-", suffix="Q3,M3", qtot=3, mod=3)
+    make("ijlm", "--+-", suffix="Q1,M3", qtot=1, mod=3)
+
+    make("inp",   "+--")
+    make("inp",   "++-")
+    make("inzxp", "++00-", signs="++-")
+
+    make("pom",   "--+")
+    make("pyzom", "-00-+", signs="--+")
+
+    make("nojl",   "++--")
+    make("nojl",   "++--", suffix="M2", mod=2)
+
+    make("inom",   "+++-")
+    make("inom",   "+++-", suffix="M2", mod=2)
+    make("ixnyom", "+0+0+-", signs="+++-")
+
+    return dct
+
+
+
+
+@pytest.fixture
+def symmetry_contractions(symmetries1D):
+
+    dct = {}
+    def make(keyA, keyB, keyC):
+
+        symA, _, legsA, symlegsA = symmetries1D[keyA] 
+        symB, _, legsB, symlegsB = symmetries1D[keyB]
+        symC, _, legsC, symlegsC = symmetries1D[keyC]
+
+        sym     = tn.dictriplet(symA,     symB,     symC)
+        legs    = tn.dictriplet(legsA,    legsB,    legsC) 
+        symlegs = tn.dictriplet(symlegsA, symlegsB, symlegsC) 
+
+        symcon = tn.SymmetryContraction(symA, symB, legs)
+        dct[(keyA, keyB, keyC)] = (symcon, sym, legs, symlegs)
+
+
+    make("ijk,++-",       "klm,++-",       "ijlm,+++-")
+    make("inom,+++-",     "inp,++-",       "pom,--+")
+    make("ixnyom,+0+0+-", "inzxp,++00-",   "pyzom,-00-+")
+
+    make("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3")
+    make("ijk,++-,Q1,M3", "klm,-+-,Q2,M3", "ijlm,--+-,Q1,M3")
+    make("ijk,++-,M3",    "klm,++-",       "ijlm,+++-,M3")
+    make("ijk,++-",       "klm,++-,M3",    "ijlm,+++-,M3")
+    make("ijk,++-,M2",    "klm,++-",       "ijlm,+++-,M2")
+    make("ijk,++-",       "klm,++-,M5",    "ijlm,+++-,M5")
+
+    make("ijlm,+++-",     "nojl,++--",     "inom,+++-")
+    make("ijlm,+++-,M2",  "nojl,++--",     "inom,+++-,M2")
+    make("ijlm,+++-",     "nojl,++--,M2",  "inom,+++-,M2")
+
+    return dct
+
+
+
+
+@pytest.fixture
+def aux_symlabels(symmetry_contractions):   
+
+    dct = {}
+    def make(*key):
+
+        symcon, sym, _, _ = symmetry_contractions[key]
+
+        phase = -symcon.phase
+        symA  = sym["A"]
+        symB  = sym["B"]
+
+        def _make(symindicesA, symindicesB):
+              
+            Saux_A = make_aux_symlabels(symA, symindicesA)
+            Saux_B = make_aux_symlabels(symB, symindicesB, phase=phase)
+            Saux   = lib.align_symlabels(Saux_A, Saux_B)
+
+            dct[key] = Saux
+
+        return _make
+
+    symidxA = [(0,1), (2,3)]
+    symidxB = [(0,1), (2,)]
+
+    make("inom,+++-",     "inp,++-",      "pom,--+"    )(symidxA, symidxB)
+    make("ixnyom,+0+0+-", "inzxp,++00-",  "pyzom,-00-+")(symidxA, symidxB)
+
+    symidxA = [(1,2), (0,3)]
+    symidxB = [(2,3), (0,1)]
+
+    make("ijlm,+++-",      "nojl,++--",    "inom,+++-"   )(symidxA, symidxB)
+    make("ijlm,+++-,M2",   "nojl,++--",    "inom,+++-,M2")(symidxA, symidxB)
+    make("ijlm,+++-",      "nojl,++--,M2", "inom,+++-,M2")(symidxA, symidxB)
+
+    return dct
+
+
+
+
+
+
+@pytest.fixture
+def aligned_symlabels(symmetry_contractions):  
+
+    dct = {}
+    def make(idx, *key):
+
+        def _make(A, B, ans, ans1):
+            dct[(idx, *key)] = (A, B, ans, ans1)
+
+        return _make
+
+    A = np.arange(0,5)
+    B = np.arange(0,2)
+    C = np.arange(1,5)
+
+    ans  = np.array([0,1])
+    ans1 = lib.align_symlabels(A, B)
+    make(1, "ijk,++-",    "klm,++-",    "ijlm,+++-")(A, B, ans, ans1)
+
+    ans  = np.array([1,2,3,4])
+    ans1 = lib.align_symlabels(A, C)
+    make(1, "ijk,++-,Q1,M3", "klm,++-,Q2,M3", \
+                             "ijlm,+++-,Q3,M3")(A, C, ans, ans1)
+
+    ans  = np.array([1,2])
+    ans1 = lib.align_symlabels(C, lib.fold_1D(A, 3))
+    make(1, "ijk,++-",    "klm,++-,M3", "ijlm,+++-,M3")(A, C, ans, ans1)
+
+    ans  = np.array([0,1,2])
+    ans1 = lib.align_symlabels(A, lib.fold_1D(C, 3))
+    make(1, "ijk,++-,M3", "klm,++-",    "ijlm,+++-,M3")(A, C, ans, ans1)
+
+    return dct
+
+
+
+
+
+@pytest.fixture
+def maps_fixt(symmetry_contractions, symlabels1D, aux_symlabels):
+
+    key = ("ijlm,+++-", "nojl,++--", "inom,+++-")
+
+    # Get symmetries
+    symcon, sym, legs, symlegs = symmetry_contractions[key]
+
+    Saux      = aux_symlabels[key]
+    symlabels = [symlabels1D["j"], symlabels1D["l"], Saux]
+    aux_sym   = tn.Symmetry1D("++-", symlabels)
+
+    # Compute initial maps
+    mapA = tn.Map.compute(sym["A"], Str("IJLM")) 
+    mapB = tn.Map.compute(sym["B"], Str("NOJL"))
+    mapQ = tn.Map.compute(aux_sym,  Str("JLQ"))
+  
+    # Compute map contractions
+    maps, legs, shapes = make_map_contractions(mapA, mapB, mapQ, Saux)
+    return key, maps, legs, shapes
+
+
+
+
+@pytest.fixture
+def random_maps_fixt(aux_symlabels):
+
+    # Auxiliary symlabels (for shape)
+    Saux = aux_symlabels[("ijlm,+++-", "nojl,++--", "inom,+++-")]
+
+    # Compute initial random maps
+    mapA = lib.create_random_map(Str("IJLM"), (5,2,4,4),       14) 
+    mapB = lib.create_random_map(Str("NOJL"), (5,2,2,4),       10)
+    mapQ = lib.create_random_map(Str("JLQ"),  (2,4,len(Saux)), 10)
+
+    initial_maps = [mapA, mapB, mapQ]
+
+    # Compute map contractions
+    maps, legs, shapes = make_map_contractions(mapA, mapB, mapQ, Saux)
+
+    return initial_maps, maps, legs, shapes
+
+
+
+
+
+def make_map_contractions(mapA, mapB, mapQ, Saux):
+
+    # Compute map contractions
+    mapAB = np_einsum_of_maps("IJLM,NOJL->IMNO", Str("IMNO"), mapA, mapB)
+    mapAQ = np_einsum_of_maps("IJLM,JLQ->IMQ",   Str("IMQ"),  mapA, mapQ)
+    mapBQ = np_einsum_of_maps("NOJL,JLQ->NOQ",   Str("NOQ"),  mapB, mapQ)
+
+    maps = [mapA, mapB, mapQ, mapAB, mapAQ, mapBQ]
+    maps = sorted(maps, key=lambda x: x.legs)
+
+    legs   = [Str("IJLM"), \
+              Str("IMNO"), \
+              Str("IMQ"),  \
+              Str("JLQ"),  \
+              Str("NOJL"), \
+              Str("NOQ")]
+
+    shapes = [(5,2,4,4),       \
+              (5,4,5,2),       \
+              (5,4,len(Saux)), \
+              (2,4,len(Saux)), \
+              (5,2,2,4),       \
+              (5,2,len(Saux))]
+
+    return maps, legs, shapes
+
+
+
+
+
+
+    
+
+class TestSymmetryContraction:
+
+
+   @pytest.fixture(autouse=True)
+   def request_symlabels(self, symlabels1D):
+       self._symlabels = symlabels1D
+
+
+   @pytest.fixture(autouse=True)
+   def request_symmetries(self, symmetries1D):
+       self._symmetries_and_data = symmetries1D
+
+
+   @pytest.fixture(autouse=True)
+   def request_symmetry_contractions(self, symmetry_contractions):
+       self._symcon_and_data = symmetry_contractions
+
+
+   def symlabels(self, symlegs=None):
+       if  symlegs is None:
+           return self._symlabels
+       return [self._symlabels[l] for l in symlegs]
+
+
+   def symmetries_and_data(self, key):
+       sym, data, legs, symlegs = self._symmetries_and_data[key]
+       return sym, data, legs, symlegs
+
+
+   def symmetries(self, key):
+       sym = self._symmetries_and_data[key][0]
+       return sym
+
+
+   def symmetry_contractions_and_data(self, key):
+       symcon, sym, legs, symlegs = self._symcon_and_data[key]
+       return symcon, sym, legs, symlegs
+
+
+   def symmetry_contractions(self, key):
+       symcon = self._symcon_and_data[key][0]
+       return symcon
+
 
    # --- Test constructor --------------------------------------------------- #
 
-   def test_construct(self):
+   @pytest.mark.parametrize("key, phase",                         \
+   [                                                              \
+   [("ijk,++-",       "klm,++-",       "ijlm,+++-"),        1],   \
+   [("ijlm,+++-",     "nojl,++--",     "inom,+++-"),        1],   \
+   [("inom,+++-",     "inp,++-",       "pom,--+"),         -1],   \
+   [("ixnyom,+0+0+-", "inzxp,++00-",   "pyzom,-00-+"),     -1],   \
+   [("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"),  1],   \
+   [("ijk,++-,M3",    "klm,++-",       "ijlm,+++-,M3"),     1],   \
+   [("ijk,++-",       "klm,++-,M3",    "ijlm,+++-,M3"),     1],   \
+   ])
+   def test_construct(self, key, phase):
 
-       def _test(symA, symB, legs, symlegs, phase):
+       out, sym, legs, symlegs = self.symmetry_contractions_and_data(key)
 
-           sym = tn.dictriplet(symA, symB, None)
-           out = tn.SymmetryContraction(symA, symB, legs)
-           self.assertSymmetryContraction(out, sym, legs, symlegs, phase)   
+       sym1     = cp.deepcopy(sym)
+       symlegs1 = cp.deepcopy(symlegs)
 
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
+       sym1["C"]     = None
+       symlegs1["C"] = None
 
-       # Test-1
-       symA    = tn.Symmetry1D("++-", (Si,Sj,Sk))
-       symB    = tn.Symmetry1D("++-", (Sk,Sl,Sm))
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), None)
-       phase   = 1
+       util.assert_symmetry_contraction(out, sym1, legs, symlegs1, phase)
 
-       _test(symA, symB, legs, symlegs, phase)
 
-       # Test-2
-       symA    = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB    = tn.Symmetry1D("++-",  (Si,Sn,Sp))
-       legs    = tn.dictriplet(Str("inom"), Str("inp"), Str("pom"))
-       symlegs = tn.dictriplet(Str("INOM"), Str("INP"), None)
-       phase = -1
 
-       _test(symA, symB, legs, symlegs, phase)
+   @pytest.mark.parametrize("keyA, keyB, legsC",   \
+   [["inom,+++-", "inp,+--", Str("pom")]])
+   @pytest.mark.xfail
+   def test_construct_failed(self, keyA, keyB, legsC):
 
-       # Test-2.1
-       symA    = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB    = tn.Symmetry1D("+--",  (Si,Sn,Sp))
-       legs    = tn.dictriplet(Str("inom"), Str("inp"), Str("pom"))
-       symlegs = tn.dictriplet(Str("INOM"), Str("INP"), None)
-       phase = -1
+       symA, _, legsA, _ = self.symmetries_and_data(keyA)
+       symB, _, legsB, _ = self.symmetries_and_data(keyB)
 
-       must_fail(_test)(symA, symB, legs, symlegs, phase)
+       legs   = tn.dictriplet(legsA, legsB, legsC) 
+       symcon = tn.SymmetryContraction(symA, symB, legs)
 
-       # Test-3
-       symA    = tn.Symmetry1D("+0+0+-", (Si,Sn,So,Sm))
-       symB    = tn.Symmetry1D("++00-",  (Si,Sn,Sp))
-       legs    = tn.dictriplet(Str("ixnyom"), Str("inzxp"), Str("pyzom"))
-       symlegs = tn.dictriplet(Str("INOM"),   Str("INP"),   None)
-       phase = -1
-
-       _test(symA, symB, legs, symlegs, phase)        
-
-       # Test-4      
-       symA    = tn.Symmetry1D("++-", (Si,Sj,Sk), qtot=1, mod=3)
-       symB    = tn.Symmetry1D("++-", (Sk,Sl,Sm), qtot=2, mod=3)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), None)
-       phase   = 1
-
-       _test(symA, symB, legs, symlegs, phase)   
-
-       # Test-5      
-       symA    = tn.Symmetry1D("++-", (Si,Sj,Sk), mod=3)
-       symB    = tn.Symmetry1D("++-", (Sk,Sl,Sm))
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), None)
-       phase   = 1
-
-       _test(symA, symB, legs, symlegs, phase)     
-
-       # Test-6      
-       symA    = tn.Symmetry1D("++-", (Si,Sj,Sk))
-       symB    = tn.Symmetry1D("++-", (Sk,Sl,Sm), mod=3)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), None)
-       phase   = 1
-
-       _test(symA, symB, legs, symlegs, phase)    
 
 
 
    # --- Test compute() ----------------------------------------------------- #
 
-   def test_compute(self):
+   @pytest.mark.parametrize("key, phase",                         \
+   [                                                              \
+   [("ijk,++-",       "klm,++-",       "ijlm,+++-"),        1],   \
+   [("ijlm,+++-",     "nojl,++--",     "inom,+++-"),        1],   \
+   [("inom,+++-",     "inp,++-",       "pom,--+"),         -1],   \
+   [("ixnyom,+0+0+-", "inzxp,++00-",   "pyzom,-00-+"),     -1],   \
+   [("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"),  1],   \
+   [("ijk,++-,Q1,M3", "klm,-+-,Q2,M3", "ijlm,--+-,Q1,M3"), -1],   \
+   [("ijk,++-,M2",    "klm,++-",       "ijlm,+++-,M2"),     1],   \
+   [("ijk,++-",       "klm,++-,M5",    "ijlm,+++-,M5"),     1],   \
+   ])
+   def test_compute(self, key, phase):
 
-       def _test(symA, symB, symC, legs, symlegs, phase):
+       out, sym, legs, symlegs = self.symmetry_contractions_and_data(key)
 
-           sym = tn.dictriplet(symA, symB, symC)
-           out = tn.SymmetryContraction(symA, symB, legs)
-           out.compute()
-           self.assertSymmetryContraction(out, sym, legs, symlegs, phase)        
+       out.compute()
+       util.assert_symmetry_contraction(out, sym, legs, symlegs, phase)
 
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
-
-       # Test-1
-       symA    = tn.Symmetry1D("++-",  (Si,Sj,Sk))
-       symB    = tn.Symmetry1D("++-",  (Sk,Sl,Sm))
-       symC    = tn.Symmetry1D("+++-", (Si,Sj,Sl,Sm))
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), Str("IJLM"))
-       phase   = 1
-
-       _test(symA, symB, symC, legs, symlegs, phase)
-
-       # Test-2
-       symA    = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB    = tn.Symmetry1D("++-",  (Si,Sn,Sp))
-       symC    = tn.Symmetry1D("--+",  (Sp,So,Sm))
-       legs    = tn.dictriplet(Str("inom"), Str("inp"), Str("pom"))
-       symlegs = tn.dictriplet(Str("INOM"), Str("INP"), Str("POM"))
-       phase = -1
-
-       _test(symA, symB, symC, legs, symlegs, phase)
-
-       # Test-3
-       symA    = tn.Symmetry1D("+0+0+-", (Si,Sn,So,Sm))
-       symB    = tn.Symmetry1D("++00-",  (Si,Sn,Sp))
-       symC    = tn.Symmetry1D("-00-+",  (Sp,So,Sm))
-       legs    = tn.dictriplet(Str("ixnyom"), Str("inzxp"), Str("pyzom"))
-       symlegs = tn.dictriplet(Str("INOM"),   Str("INP"),   Str("POM"))
-       phase = -1
-
-       _test(symA, symB, symC, legs, symlegs, phase)        
-
-       # Test-4      
-       symA    = tn.Symmetry1D("++-",  (Si,Sj,Sk),    qtot=1, mod=3)
-       symB    = tn.Symmetry1D("++-",  (Sk,Sl,Sm),    qtot=2, mod=3)
-       symC    = tn.Symmetry1D("+++-", (Si,Sj,Sl,Sm), qtot=3, mod=3)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), Str("IJLM"))
-       phase   = 1
-
-       _test(symA, symB, symC, legs, symlegs, phase)   
-
-       # Test-4.1      
-       symA    = tn.Symmetry1D("++-",  (Si,Sj,Sk),    qtot=1, mod=3)
-       symB    = tn.Symmetry1D("-+-",  (Sk,Sl,Sm),    qtot=2, mod=3)
-       symC    = tn.Symmetry1D("--+-", (Si,Sj,Sl,Sm), qtot=1, mod=3)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), Str("IJLM"))
-       phase   = -1
-
-       _test(symA, symB, symC, legs, symlegs, phase)
-
-       # Test-5      
-       symA    = tn.Symmetry1D("++-",  (Si,Sj,Sk),    mod=2)
-       symB    = tn.Symmetry1D("++-",  (Sk,Sl,Sm))
-       symC    = tn.Symmetry1D("+++-", (Si,Sj,Sl,Sm), mod=2)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), Str("IJLM"))
-       phase   = 1
-
-       _test(symA, symB, symC, legs, symlegs, phase)     
-
-       # Test-6      
-       symA    = tn.Symmetry1D("++-",  (Si,Sj,Sk))
-       symB    = tn.Symmetry1D("++-",  (Sk,Sl,Sm),    mod=5)
-       symC    = tn.Symmetry1D("+++-", (Si,Sj,Sl,Sm), mod=5)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-       symlegs = tn.dictriplet(Str("IJK"), Str("KLM"), Str("IJLM"))
-       phase   = 1
-
-       _test(symA, symB, symC, legs, symlegs, phase)   
 
 
 
    # --- Test output qtot, mod, symlabels, fullsigns ------------------------ #
 
-   def test_output_qtot(self):
+   @pytest.mark.parametrize("key",                        \
+   [                                                      \
+   ("ijk,++-",       "klm,++-",       "ijlm,+++-"),       \
+   ("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"), \
+   ("ijk,++-,Q1,M3", "klm,-+-,Q2,M3", "ijlm,--+-,Q1,M3"), \
+   ])
+   def test_output_qtot(self, key):
 
-       def _test(symA, symB, legs, ans):
+       symcon, sym, _, _ = self.symmetry_contractions_and_data(key)
 
-           symcon = tn.SymmetryContraction(symA, symB, legs)
-           out    = symcon.output_qtot()
-           assert out == ans
+       out = symcon.output_qtot()
+       ans = sym["C"].qtot
 
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
-
-       # Test-1
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk))
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm))
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       _test(symA, symB, legs, 0)
-
-       # Test-4      
-       symA    = tn.Symmetry1D("++-", (Si,Sj,Sk), qtot=1, mod=3)
-       symB    = tn.Symmetry1D("++-", (Sk,Sl,Sm), qtot=2, mod=3)
-       legs    = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       _test(symA, symB, legs, 3)
-
-       # Test-4.1      
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk), qtot=1, mod=3)
-       symB = tn.Symmetry1D("-+-", (Sk,Sl,Sm), qtot=2, mod=3)
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-        
-       _test(symA, symB, legs, 1)
+       util.assert_array_close(out, ans)
 
 
 
-   def test_output_mod(self):
 
-       def _test(symA, symB, legs, ans):
+   @pytest.mark.parametrize("key",                        \
+   [                                                      \
+   ("ijk,++-",       "klm,++-",       "ijlm,+++-"),       \
+   ("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"), \
+   ("ijk,++-,M2",    "klm,++-",       "ijlm,+++-,M2"),    \
+   ("ijk,++-",       "klm,++-,M5",    "ijlm,+++-,M5"),    \
+   ])
+   def test_output_mod(self, key):
 
-           symcon = tn.SymmetryContraction(symA, symB, legs)
-           out    = symcon.output_mod()
+       symcon, sym, _, _ = self.symmetry_contractions_and_data(key)
 
-           if   ans is None:
-                assert out is None
-           else:
-                assert out == ans
+       out = symcon.output_mod()
+       ans = sym["C"].mod
 
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
-
-       # Test-1
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk))
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm))
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       _test(symA, symB, legs, None)
-
-       # Test-4      
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk), qtot=1, mod=3)
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm), qtot=2, mod=3)
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       _test(symA, symB, legs, 3)   
-
-       # Test-5      
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk), mod=2)
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm))
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       _test(symA, symB, legs, 2)    
-
-       # Test-6      
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk))
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm), mod=5)
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       _test(symA, symB, legs, 5)
-
-       # Extra test
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk), mod=3)
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm), mod=5)
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       must_fail(_test)(symA, symB, legs, None)
+       if   ans is None:
+            assert out is None
+       else:
+            util.assert_array_close(out, ans)
 
 
 
-   def test_output_symlabels(self):
 
-       def _test(symA, symB, legs, fullsigns, ans):
+   @pytest.mark.parametrize("keyA, keyB, legsC", \
+   [                                             \
+   ["ijk,++-,M3", "klm,++-,M5", Str("ijlm")],    \
+   ])
+   @pytest.mark.xfail
+   def test_output_mod_failed(self, keyA, keyB, legsC):
 
-           symcon = tn.SymmetryContraction(symA, symB, legs)
-           symcon.compute()
+       symA, _, legsA, _ = self.symmetries_and_data(keyA)
+       symB, _, legsB, _ = self.symmetries_and_data(keyB)
 
-           out = symcon.output_symlabels(fullsigns)           
-           self.assertEqualArrayList(out, ans)       
+       legs   = tn.dictriplet(legsA, legsB, legsC) 
+       symcon = tn.SymmetryContraction(symA, symB, legs)
 
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
-
-       # Test-1
-       symA = tn.Symmetry1D("++-",  (Si,Sj,Sk))
-       symB = tn.Symmetry1D("++-",  (Sk,Sl,Sm))
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       fullsigns = "+++-"
-       symlabels = (Si,Sj,Sl,Sm)
-
-       _test(symA, symB, legs, fullsigns, symlabels)
-
-       # Test-2
-       symA = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++-",  (Si,Sn,Sp))
-       legs = tn.dictriplet(Str("inom"), Str("inp"), Str("pom"))
-
-       fullsigns = "--+"
-       symlabels = (Sp,So,Sm)
-
-       _test(symA, symB, legs, fullsigns, symlabels)
-
-       # Test-3
-       symA = tn.Symmetry1D("+0+0+-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++00-",  (Si,Sn,Sp))
-       legs = tn.dictriplet(Str("ixnyom"), Str("inzxp"), Str("pyzom"))
-
-       fullsigns = "-00-+"
-       symlabels = (Sp,So,Sm)
-
-       _test(symA, symB, legs, fullsigns, symlabels)
-
-       # Test-4      
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk), qtot=1, mod=3)
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm), qtot=2, mod=3)
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-       fullsigns = "+++-"
-       symlabels = (Si,Sj,Sl,Sm)
-
-       _test(symA, symB, legs, fullsigns, symlabels)
+       out = symcon.output_mod()
 
 
-       
-   def test_output_fullsigns(self):
 
-       def _test(symA, symB, legs, ans):
 
-           symcon = tn.SymmetryContraction(symA, symB, legs)
-           symcon.compute()
+   @pytest.mark.parametrize("key",                        \
+   [                                                      \
+   ("ijk,++-",       "klm,++-",       "ijlm,+++-"),       \
+   ("ijlm,+++-",     "nojl,++--",     "inom,+++-"),       \
+   ("inom,+++-",     "inp,++-",       "pom,--+"),         \
+   ("ixnyom,+0+0+-", "inzxp,++00-",   "pyzom,-00-+"),     \
+   ("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"), \
+   ])
+   def test_output_symlabels(self, key):
 
-           out = symcon.output_fullsigns()           
-           self.assertEqualArrayList(out, ans)       
+       symcon, sym, _, _ = self.symmetry_contractions_and_data(key)
 
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
+       out = symcon.output_symlabels(sym["C"].fullsigns)
+       ans = sym["C"].symlabels
 
-       # Test-1
-       symA = tn.Symmetry1D("++-",  (Si,Sj,Sk))
-       symB = tn.Symmetry1D("++-",  (Sk,Sl,Sm))
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
+       util.assert_array_list_close(out, ans)
 
-       _test(symA, symB, legs, "+++-")
 
-       # Test-2
-       symA = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++-",  (Si,Sn,Sp))
-       legs = tn.dictriplet(Str("inom"), Str("inp"), Str("pom"))
 
-       _test(symA, symB, legs, "--+")
 
-       # Test-3
-       symA = tn.Symmetry1D("+0+0+-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++00-",  (Si,Sn,Sp))
-       legs = tn.dictriplet(Str("ixnyom"), Str("inzxp"), Str("pyzom"))
+   @pytest.mark.parametrize("key",                        \
+   [                                                      \
+   ("ijk,++-",       "klm,++-",       "ijlm,+++-"),       \
+   ("ijlm,+++-",     "nojl,++--",     "inom,+++-"),       \
+   ("inom,+++-",     "inp,++-",       "pom,--+"),         \
+   ("ixnyom,+0+0+-", "inzxp,++00-",   "pyzom,-00-+"),     \
+   ("ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"), \
+   ])
+   def test_output_fullsigns(self, key):
 
-       _test(symA, symB, legs, "-00-+")
+       symcon, sym, _, _ = self.symmetry_contractions_and_data(key)
 
-       # Test-4      
-       symA = tn.Symmetry1D("++-", (Si,Sj,Sk), qtot=1, mod=3)
-       symB = tn.Symmetry1D("++-", (Sk,Sl,Sm), qtot=2, mod=3)
-       legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
+       out = symcon.output_fullsigns()
+       ans = sym["C"].fullsigns
 
-       _test(symA, symB, legs, "+++-")
+       util.assert_array_list_equal(out, ans)
+
 
 
 
    # --- Test align_symlabels() --------------------------------------------- #
 
-   def test_align_symlabels(self):
+   @pytest.mark.parametrize("key",                           \
+   [                                                         \
+   (1, "ijk,++-",       "klm,++-",       "ijlm,+++-"),       \
+   (1, "ijk,++-,Q1,M3", "klm,++-,Q2,M3", "ijlm,+++-,Q3,M3"), \
+   (1, "ijk,++-",       "klm,++-,M3",    "ijlm,+++-,M3"),    \
+   (1, "ijk,++-,M3",    "klm,++-",       "ijlm,+++-,M3"),    \
+   ])
+   def test_align_symlabels(self, aligned_symlabels, key):
 
-       Si = np.arange(0,5) 
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-       Sl = np.arange(0,4)
-       Sm = np.arange(1,5)
-       Sn = np.arange(0,5)
-       So = np.arange(0,2)
-       Sp = np.arange(0,5)
+       symlabelsA, symlabelsB, ans, ans1 = aligned_symlabels[key]
 
-       def _test(symlabels_A, symlabels_B, modA, modB, ans, ans1):
+       symcon = self.symmetry_contractions(key[1:])
+       out    = symcon.align_symlabels(symlabelsA, symlabelsB)
 
-           symA = tn.Symmetry1D("++-", (Si,Sj,Sk), mod=modA)
-           symB = tn.Symmetry1D("++-", (Sk,Sl,Sm), mod=modB)
-           legs = tn.dictriplet(Str("ijk"), Str("klm"), Str("ijlm"))
-
-           symcon = tn.SymmetryContraction(symA, symB, legs)
-           out    = symcon.align_symlabels(symlabels_A, symlabels_B)
-
-           self.assertEqualArray(out, ans)
-           self.assertEqualArray(out, ans1)
-
-       # Test-1
-       ans  = lib.align_symlabels(Si, Sj)
-       ans1 = np.array([0,1])
-       _test(Si, Sj, None, None, ans, ans1)
-
-       # Test-2
-       ans  = lib.align_symlabels(Si, Sk)
-       ans1 = np.array([1,2,3,4])
-       _test(Si, Sk, 3, 3, ans, ans1)
-
-       # Test-3
-       ans  = lib.align_symlabels(Sk, lib.fold_1D(Si, 3)) 
-       ans1 = np.array([1,2])
-       _test(Si, Sk, None, 3, ans, ans1)
-
-       # Test-4
-       ans  = lib.align_symlabels(Si, lib.fold_1D(Sk, 3)) 
-       ans1 = np.array([0,1,2])
-       _test(Si, Sk, 3, None, ans, ans1)
+       util.assert_array_close(out, ans)
+       util.assert_array_close(out, ans1)
 
 
+ 
 
    # --- Test auxiliary symmetry -------------------------------------------- #
 
-   def test_compute_aux_symmetry(self):
+   @pytest.mark.parametrize("key, signs, symlegs, mod",                    \
+   [                                                                       \
+   [("inom,+++-",     "inp,++-",      "pom,--+"),      "++-", "in", None], \
+   [("ixnyom,+0+0+-", "inzxp,++00-",  "pyzom,-00-+"),  "++-", "in", None], \
+   [("ijlm,+++-",     "nojl,++--",    "inom,+++-"),    "++-", "jl", None], \
+   [("ijlm,+++-,M2",  "nojl,++--",    "inom,+++-,M2"), "++-", "jl", 2   ], \
+   [("ijlm,+++-",     "nojl,++--,M2", "inom,+++-,M2"), "++-", "jl", 2   ], \
+   ])
+   def test_compute_aux_symmetry(self, aux_symlabels, \
+                                       key, signs, symlegs, mod):
 
-       def _test(symA, symB, legs, signs, symlabels):
+       symcon = self.symmetry_contractions(key)
+       out = tn.symmetry.symmetry_contraction.compute_aux_symmetry(symcon) 
 
-           symcon = tn.SymmetryContraction(symA, symB, legs)
-           out    = tn.symmetry.compute_aux_symmetry(symcon)
+       symlabels = self.symlabels(symlegs)
+       symlabels = [*symlabels, aux_symlabels[key]]
+   
+       util.assert_symmetry(out, signs, symlabels, mod=mod)
 
-           self.assertSymmetry(out, signs, symlabels)  
 
-       # Define symlabels
-       Si = np.arange(0,5) 
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-       Sl = np.arange(0,4)
-       Sm = np.arange(1,5)
-       Sn = np.arange(0,5)
-       So = np.arange(0,2)
-       Sp = np.arange(0,5)
 
-       # Test-1
-       symA = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++-",  (Si,Sn,Sp))
-       legs = tn.dictriplet(Str("inom"), Str("inp"), Str("pom"))
-
-       Saux_A = lib.make_aux_symlabels(("++", "+-"), ([Si,Sn], [So,Sm]))
-       Saux_B = lib.make_aux_symlabels(("--", "+"),  ([Si,Sn], [Sp]))
-       Saux   = lib.align_symlabels(Saux_A, Saux_B)
-
-       _test(symA, symB, legs, "++-", [Si,Sn,Saux])
-
-       # Test-2
-       symA = tn.Symmetry1D("+0+0+-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++00-",  (Si,Sn,Sp))
-       legs = tn.dictriplet(Str("ixnyom"), Str("inzxp"), Str("pyzom"))
-
-       _test(symA, symB, legs, "++-", [Si,Sn,Saux])
-
-       
 
    # --- Test map contractions ---------------------------------------------- #
 
-   def test_compute_maps(self):
+   def test_compute_maps(self, maps_fixt):
 
-       # Define symmetries
-       Si = np.arange(0,5) 
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-       Sl = np.arange(0,4)
-       Sm = np.arange(1,5)
-       Sn = np.arange(0,5)
-       So = np.arange(0,2)
-       Sp = np.arange(0,5)
+       key, maps, legs, shapes = maps_fixt
 
-       Saux_A  = lib.make_aux_symlabels(("++", "+-"), ([Si,Sn], [So,Sm]))
-       Saux_B  = lib.make_aux_symlabels(("--", "+"),  ([Si,Sn], [Sp]))
-       Saux    = lib.align_symlabels(Saux_A, Saux_B)
+       symcon = self.symmetry_contractions(key)
+       out    = tn.symmetry.compute_maps(symcon)
+       out    = sorted(out, key=lambda x: x.legs)
 
-       symA    = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB    = tn.Symmetry1D("++-",  (Si,Sn,Sp))
-       aux_sym = tn.Symmetry1D("++-",  (Si,Sn,Saux))
+       util.assert_list(out, maps, fun=util.assert_map_equal)
 
-       # Compute map list
-       mapA = tn.Map.compute(symA,    Str("INOM")) 
-       mapB = tn.Map.compute(symB,    Str("INP"))
-       mapQ = tn.Map.compute(aux_sym, Str("INQ"))
-       maps = [mapA, mapB, mapQ]
-
-       AB = np.einsum("INOM,INP->MOP", mapA.array, mapB.array)
-       AQ = np.einsum("INOM,INQ->MOQ", mapA.array, mapQ.array)
-       BQ = np.einsum("INP,INQ->PQ",   mapB.array, mapQ.array)
-
-       mapAB = tn.Map(AB, Str("MOP"))
-       mapAQ = tn.Map(AQ, Str("MOQ"))
-       mapBQ = tn.Map(BQ, Str("PQ"))
-
-       ans = [mapA, mapB, mapQ, mapAB, mapAQ, mapBQ]
-
-       # Get output from compute_maps()
-       out = cp.deepcopy(maps)
-       out = tn.symmetry.compute_maps(out)
-       out = sorted(out)
-
-       # Test
-       self.assertList(out, ans, fun=self.assertEqualMap)
-
-       self.assertMap(out[0], Str("INOM"), (5,5,2,4))
-       self.assertMap(out[1], Str("INP"),  (5,5,5))
-       self.assertMap(out[2], Str("INQ"),  (5,5,len(Saux)))
-       self.assertMap(out[3], Str("MOP"),  (4,2,5))
-       self.assertMap(out[4], Str("MOQ"),  (4,2,len(Saux)))
-       self.assertMap(out[5], Str("PQ"),   (5,len(Saux)))
+       for i in range(len(out)):
+           util.assert_map(out[i], legs[i], shapes[i])
 
 
 
-   def test_compute_pairwise_contractions_of_maps(self):
+   def test_compute_pairwise_contractions_of_maps(self, random_maps_fixt):
 
-       # Define symmetries
-       Si = range(0,5) 
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-       Sm = range(1,5)
-       Sn = range(0,5)
-       So = range(0,2)
-       Sp = range(0,5)
+       init_maps, maps, legs, shapes = random_maps_fixt
 
-       symA = tn.Symmetry1D("+++-", (Si,Sn,So,Sm))
-       symB = tn.Symmetry1D("++-",  (Si,Sn,Sp))
+       def compute_pairwise_contractions_of_maps(x):
+           mod = tn.symmetry.symmetry_contraction
+           fun = mod.compute_pairwise_contractions_of_maps
+           return fun(x)
 
-       # Compute map list
-       mapA = lib.create_random_map(Str("INOM"), (5,5,2,4), 14) 
-       mapB = lib.create_random_map(Str("INP"),  (5,5,5),   10)
-       mapQ = lib.create_random_map(Str("INQ"),  (5,5,5),   10)
-       maps = [mapA, mapB, mapQ]
+       out = compute_pairwise_contractions_of_maps(init_maps)
+       out = sorted(out, key=lambda x: x.legs)
 
-       AB = np.einsum("INOM,INP->MOP", mapA.array, mapB.array)
-       AQ = np.einsum("INOM,INQ->MOQ", mapA.array, mapQ.array)
-       BQ = np.einsum("INP,INQ->PQ",   mapB.array, mapQ.array)
+       util.assert_list(out, maps, fun=util.assert_map_equal)
 
-       mapAB = tn.Map(AB, Str("MOP"))
-       mapAQ = tn.Map(AQ, Str("MOQ"))
-       mapBQ = tn.Map(BQ, Str("PQ"))
-
-       ans = [mapA, mapB, mapQ, mapAB, mapAQ, mapBQ]
-
-       # Get output from compute_pairwise_contractions_of_maps()
-       out = cp.deepcopy(maps)
-       out = tn.symmetry.compute_pairwise_contractions_of_maps(out)
-       out = sorted(out)
-
-       # Test
-       self.assertList(out, ans, fun=self.assertEqualMap)
-
-       self.assertMap(out[0], Str("INOM"), (5,5,2,4))
-       self.assertMap(out[1], Str("INP"),  (5,5,5))
-       self.assertMap(out[2], Str("INQ"),  (5,5,5))
-       self.assertMap(out[3], Str("MOP"),  (4,2,5))
-       self.assertMap(out[4], Str("MOQ"),  (4,2,5))
-       self.assertMap(out[5], Str("PQ"),   (5,5))
-       
-       
-       
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+       for i in range(len(out)):
+           util.assert_map(out[i], legs[i], shapes[i])
 
 
 

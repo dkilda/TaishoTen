@@ -49,9 +49,9 @@ class Tensor:
       if IS(sym):
 
          # Check ndim of array matches truncated ndim
-         msg = "Tensor: invalid ndim of input array"
- 
-         trunc_arr_ndim = 2*tensor.ndim - 1
+         msg = "Tensor: invalid ndim of input array" 
+         trunc_arr_ndim = sym.num_symlegs + sym.num_legs - 1 
+
          assertequal(arr.ndim, trunc_arr_ndim, msg)
 
          # Check array shape is consistent with symmetric shape
@@ -61,8 +61,9 @@ class Tensor:
          sym_shape = sym.truncated_shape
          assertequal(arr_shape, sym_shape, msg)
          
-      # Symmetrize tensor
-      tensor.symmetrize()
+         # Symmetrize tensor
+         tensor.symmetrize()
+
       return tensor
 
 
@@ -163,10 +164,8 @@ class Tensor:
 
   @property
   def shape(self):
-
       if  ISNOT(self.sym):
           return self.dense_shape
-
       return self.sym_shape + self.dense_shape
 
   @property
@@ -183,6 +182,8 @@ class Tensor:
       return {leg: dim for leg, dim in zip(legs, self.dense_shape)}
 
   def get_map(self, map_legs):
+      if ISNOT(self.sym):
+         return None
       return Map.compute(self.sym, map_legs, self.backend)
 
   # ------------------------------------------------------------------------- #
@@ -220,8 +221,8 @@ def transform(tensor, path, denselegs=None):
 
     # (3) Combine dense legs with symmetric legs list   
     #     (maps have no dense legs, only initial and final tensors do)
-    if ISNOT(denselegs):
-       denselegs = util.make_legs(tensor.ndim)
+    if  ISNOT(denselegs):
+        denselegs = util.make_legs(tensor.ndim)
 
     legs     = symlegs
     legs[0]  = symlegs[0]  + denselegs

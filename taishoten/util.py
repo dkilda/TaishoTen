@@ -226,15 +226,10 @@ class Str:
 
    # --- Subsets, size, contains --------------------------------------------- #
 
+
    def __contains__(self, other):
-       return other.to_set() in self.to_set()
+       return other.issubset(self)
 
-   def __len__(self):
-       return len(self._str) 
-
-   def find(self, x):
-       idx = self._str.find(x)
-       return idx
 
    def issubset(self, other):
 
@@ -242,6 +237,17 @@ class Str:
        other_set = other.to_set()
 
        return self_set.issubset(other_set)
+
+
+   def __len__(self):
+       return len(self._str) 
+
+
+   def find(self, x):
+       idx = self._str.find(str(x))
+       return idx
+
+
 
 
 
@@ -427,38 +433,9 @@ def truncate(legs):
 
 def cut_unsigned(x, fullsigns, unsigned='0'):
 
-    if  isinstance(x, (list, tuple, np.ndarray)):
-        return cut_unsigned_indices(x, fullsigns, unsigned=unsigned)
-
-    if  isinstance(x, Str):
-        return cut_unsigned_legs(x, fullsigns, unsigned=unsigned)
-
-    raise ValueError("cut_unsigned: invalid x type, ".format(type(x)))
-
-
-
-def cut_unsigned_legs(x, fullsigns, unsigned='0'):
-
     signed_x = ''.join(str(v) for i, v in enumerate(x) \
                                   if fullsigns[i] != unsigned)
     return Str(signed_x)
-
-
-
-def cut_unsigned_indices(idx, fullsigns, unsigned='0'):
-
-    signed_idx = []
-    num_cut    = 0
-
-    for i in idx:
-
-        if  fullsigns[i] == unsigned:
-            num_cut += 1
-            continue
-  
-        signed_idx.append(i - num_cut)
-
-    return signed_idx
 
     
 

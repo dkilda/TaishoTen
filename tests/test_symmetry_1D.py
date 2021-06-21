@@ -1,498 +1,509 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import unittest
+import pytest
 import numpy as np
 import helper_lib as lib
+
+import util
+from util import isiterable,  noniterable
+
 import taishoten as tn
-
 from taishoten import Str
-from .util     import TaishoTenTestCase, must_fail
 
 
 
-class TestSymmetry1D(TaishoTenTestCase):
 
 
-   def test_construct(self):
+def make_symmetry_1D(fullsigns, symlabels, qtot=0, mod=None, signs=None):
 
-       def _test(fullsigns, symlabels, qtot=0, mod=None, signs=None):
+    sym  = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
 
-           sym = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
-           self.assertSymmetry(sym, fullsigns, symlabels, qtot, mod, signs)
+    data = {"fullsigns": fullsigns, "signs": signs, \
+            "symlabels": symlabels, "qtot": qtot, "mod": mod}
 
-       Si = range(0,5)
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-
-       _test("+--",  [Si,Sj,Sk])
-       _test("--+-", [Sl,Sj,Si,Sk])
-       _test("+-+-", [Sk,Sl,Sj,Si], 1, None)
-       _test("+-+-", [Sk,Sl,Sj,Si], 1, 2)
-
-       _test("+0--",   [Si,Sj,Sk],    signs="+--")
-       _test("--0+0-", [Sl,Sj,Si,Sk], signs="--+-")
-       _test("--00+-", [Sl,Sj,Si,Sk], signs="--+-")
+    return sym, data
 
 
 
-   def test_shape(self):
 
-       def _test(shape, fullsigns, symlabels, qtot=0, mod=None):
+@pytest.fixture
+def symlabels1D():
 
-           sym  = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
-           out  = sym.shape
-           out1 = sym.truncated_shape
+    Si = np.arange(0,5)
+    Sj = np.arange(0,2)
+    Sk = np.arange(1,5)
+    Sl = np.arange(0,4)
 
-           self.assertEqual(out,  shape)
-           self.assertEqual(out1, shape[:-1])
-
-       Si = range(0,5)
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
-
-       _test((5,2,4),   "+--",  [Si,Sj,Sk])
-       _test((4,2,5,4), "--+-", [Sl,Sj,Si,Sk])
-       _test((4,4,2,5), "+-+-", [Sk,Sl,Sj,Si], 1, 2)
-
-       _test((5,2,4),   "+0--",   [Si,Sj,Sk])
-       _test((4,2,5,4), "--0+0-", [Sl,Sj,Si,Sk])
-       _test((4,2,5,4), "--00+-", [Sl,Sj,Si,Sk])
+    return Si, Sj, Sk, Sl
 
 
 
-   def test_flipped_signs(self):
 
-       def _test(sym, flipped_fullsigns, flipped_signs=None):
+@pytest.fixture
+def symmetries1D(symlabels1D):
+    
+    Si, Sj, Sk, Sl = symlabels1D 
 
-           if flipped_signs is None:
-              flipped_signs = flipped_fullsigns
+    dct = {}
+    def make(key):
+        def _make(*args, **kwargs):  
+            dct[key] = make_symmetry_1D(*args, **kwargs)
+        return _make
 
-           out  = sym.flipped_fullsigns
-           out1 = sym.flipped_signs
+    make("A1")("+--",  [Si,Sj,Sk])
+    make("A2")("+0--", [Si,Sj,Sk], signs="+--")
+    make("A3")("+--",  [Si,Sj,Sk], mod=2)
+    make("A4")("+--",  [Si,Sj,Sk], mod=3)
 
-           assert out  == flipped_fullsigns
-           assert out1 == flipped_signs
+    make("B1")("--+-",   [Sl,Sj,Si,Sk])
+    make("B2")("--0+0-", [Sl,Sj,Si,Sk], signs="--+-")
+    make("B3")("--00+-", [Sl,Sj,Si,Sk], signs="--+-")
 
-       Si = range(0,5)
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(0,4)
+    make("C1")("+-+-", [Sk,Sl,Sj,Si], 1, 2)
+    make("C2")("+-+-", [Sk,Sl,Sj,Si], 1, None)
+    
+    return dct
 
-       symA = tn.Symmetry1D("+--",    [Si,Sj,Sk])
-       symB = tn.Symmetry1D("--+-",   [Sl,Sj,Si,Sk])
-       symC = tn.Symmetry1D("+-+-",   [Sk,Sl,Sj,Si], 1, 2)
-       symD = tn.Symmetry1D("+0--",   [Si,Sj,Sk])
-       symE = tn.Symmetry1D("--0+0-", [Sl,Sj,Si,Sk])
-       symF = tn.Symmetry1D("--00+-", [Sl,Sj,Si,Sk])
 
-       _test(symA, "-++")
-       _test(symB, "++-+")
-       _test(symC, "-+-+")
-       _test(symD, "-0++",   flipped_signs="-++")
-       _test(symE, "++0-0+", flipped_signs="++-+")
-       _test(symF, "++00-+", flipped_signs="++-+")
 
-       
+
+
+
+
+
+class TestSymmetry1D:
+
+
+   @pytest.fixture(autouse=True)
+   def request_symlabels(self, symlabels1D):
+       self.symlabels = symlabels1D
+
+
+
+   @pytest.fixture(autouse=True)
+   def request_symmetries_and_data(self, symmetries1D):
+       self.symmetries_and_data = symmetries1D
+
+
+
+   def symmetries(self, key):
+       sym, _ = self.symmetries_and_data[key]
+       return sym
+
+
+
+
+   @pytest.mark.parametrize("key", ["A1", "A2", "A3", \
+                                    "B1", "B2", "B3", \
+                                    "C1", "C2"        \
+                                   ])
+   def test_construct(self, key):
+
+       sym, data = self.symmetries_and_data[key] 
+       util.assert_symmetry(sym, **data)
+   
+
+
+
+   @pytest.mark.parametrize("key", ["A1"])
+   def test_construct_from_range_input(self, key):
+
+       sym, data = self.symmetries_and_data[key]  
+       qtot      = data["qtot"]
+       mod       = data["mod"]   
+       fullsigns = data["fullsigns"] 
+       symlabels = [range(s[0], s[-1] + 1) for s in data["symlabels"]]
+
+       sym = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
+       util.assert_symmetry(sym, **data)
+
+
+
+
+   @pytest.mark.parametrize("key, shape", [["A1", (5,2,4)  ], \
+                                           ["A2", (5,2,4)  ], \
+                                           ["A3", (5,2,4)  ], \
+                                           ["B1", (4,2,5,4)], \
+                                           ["B2", (4,2,5,4)], \
+                                           ["B3", (4,2,5,4)], \
+                                           ["C1", (4,4,2,5)], \
+                                           ["C2", (4,4,2,5)], \
+                                          ]) 
+   def test_shape(self, key, shape):
+       sym = self.symmetries(key) 
+       assert sym.shape           == shape
+       assert sym.truncated_shape == shape[:-1]
+
+
+
+
+   @pytest.mark.parametrize("key, flipped_fullsigns, flipped_signs",    \
+                             [                            \
+                              ["A1",  "-++",    "-++"  ], \
+                              ["A2",  "-0++",   "-++"  ], \
+                              ["B1",  "++-+",   "++-+" ], \
+                              ["B2",  "++0-0+", "++-+" ], \
+                              ["B3",  "++00-+", "++-+" ], \
+                              ["C1",  "-+-+",   "-+-+" ], \
+                             ]) 
+   def test_flipped_signs(self, key, flipped_fullsigns, flipped_signs):
+
+       sym = self.symmetries(key) 
+       assert sym.flipped_fullsigns == flipped_fullsigns
+       assert sym.flipped_signs     == flipped_signs
+
+   
+
 
    def test_map(self):
 
-       def _test(sym, legs, shape, num_elems):
+       sym = self.symmetries("A1")
+       legs = Str("IJK")
+       shape = (5,2,4)
+       num_elems = 11
 
-           assert not sym.has_map
-           mp = lib.create_random_map(legs, shape, num_elems)
-           sym.set_map(mp)
+       np.random.seed(1)
 
-           assert sym.has_map
-           self.assertEqualMap(sym.map, mp)
-           self.assertMap(sym.map, legs, shape)
+       assert not sym.has_map
+       mp = lib.create_random_map(legs, shape, num_elems)
+       sym.set_map(mp)
+
+       assert sym.has_map
+       util.assert_map_equal(sym.map, mp)
+       util.assert_map(sym.map, legs, shape)
  
-           sym.unset_map()
-           assert not sym.has_map
-
-       # Define symmetry labels
-       np.random.seed(1)
-
-       Si = range(0,5)
-       Sj = range(0,2)
-       Sk = range(1,5)
-
-       # Test
-       sym = tn.Symmetry1D("+--",  [Si,Sj,Sk])
-       _test(sym, "IJK", (5,2,4), 5)       
+       sym.unset_map()
+       assert not sym.has_map
 
 
 
-   def test_find_zeros(self):
 
-       def _test(sym, shape, idx):
+   @pytest.mark.parametrize("shape, idx",                            \
+                            [                                        \
+                             [(10,),   [(1,3,7,8)                ]], \
+                             [(10,12), [(0,2,3,6,7), (11,5,0,7,9)]], \
+                            ])
+   def test_find_zeros(self, shape, idx):
 
-           A = lib.randn(shape)
-           for i in idx:
-               A[i] = 0.0
-
-           out = sym.find_zeros(A)
-           self.assertEqual(out, idx[0])
-
-       # Define symmetry
-       np.random.seed(1)
-
-       Si = range(0,5)
-       Sj = range(0,2)
-       Sk = range(1,5)
-       sym = tn.Symmetry1D("+--",  [Si,Sj,Sk])
-
-       # Test-1
-       idx   = [(1,3,7,8)]
-       shape = (10,)
-       _test(sym, shape, idx)
-
-       # Test-2
-       idx   = [(0,2,3,6,7), (11,19,0,7,9)]
-       shape = (10,12)
-       _test(sym, shape, idx)
-       
-
-
-   def test_sum_abs_inner_symlabels(self):
-
-       def _test(sym):
-
-          out = sym.sum_abs_inner_symlabels(sym.symlabels)
-          ans = [np.sum(s, axis=-1) for s in sym.symlabels]
-          self.assertEqualArrayList(out, ans)
+       sym = self.symmetries("A1")
 
        np.random.seed(1)
 
-       # Test-1
-       symlabels = [lib.randn(5), lib.randn(2), lib.randn(4)]
-       sym       = tn.Symmetry1D("+--", symlabels)
-       _test(sym)
+       A = lib.randn(*shape)
+       for i in zip(*idx):
+           A[i] = 0.0
 
-       # Test-2
-       symlabels = [lib.randn(5,3), \
-                    lib.randn(2,3), \
-                    lib.randn(4,3)  ]
+       out  = sym.find_zeros(A)
+       out1 = tn.symmetry.symmetry.find_zeros(A)
 
-       sym = tn.Symmetry3D("+--", symlabels)
-       _test(sym)
+       util.assert_array_equal(out,  idx[0])
+       util.assert_array_equal(out1, idx[0])
 
 
 
-   def test_flatten_symlabels(self):
+   @pytest.mark.parametrize("shape", [10, (10,1), (10,3), \
+                                       5,  (5,1),  (5,3), \
+                                      13, (13,1), (13,3), \
+                                     ])
+   def test_sum_abs_inner_symlabels(self, shape):
 
-       def _test(sym, indices=None, phase=1):
-            
-           if  indices is None:
-               indices = range(len(sym.shape))
-   
-           signs     = ''.join([sym.signs[i]     for i in indices]) 
-           symlabels =         [sym.symlabels[i] for i in indices] 
+       sym = self.symmetries("A1")
 
-           out  = sym.flatten_symlabels(indices, phase)
-           ans  = lib.flatten_symlabels(signs, symlabels, phase)
-           ans1 = lib.flatten_symlabels_1(signs, symlabels, phase)
-           ans2 = lib.flatten_symlabels_2(signs, symlabels, phase)
+       np.random.seed(1)
+       symlabels = lib.randint(-21, 21, shape)
 
-           assert type(out) is np.ndarray
+       out = sym.sum_abs_inner_symlabels(symlabels)
+       ans = abs(symlabels)
+       if  symlabels.ndim > 1:
+           ans = np.sum(abs(symlabels), axis=-1) 
 
-           size = np.prod([len(s) for s in symlabels])
-           self.assertEqual(out.shape, (size, 1))
-
-           self.assertCloseArray(out, ans)
-           self.assertCloseArray(out, ans1)
-           self.assertCloseArray(out, ans2)
-
-       # Define symmetries
-       Si = np.arange(0,5)
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-       Sl = np.arange(0,4)
-         
-       symA = tn.Symmetry1D("+--",    [Si,Sj,Sk])
-       symB = tn.Symmetry1D("--+-",   [Sl,Sj,Si,Sk])
-       symC = tn.Symmetry1D("--0+0-", [Sl,Sj,Si,Sk])
-
-       # Main tests
-       _test(symA)
-       _test(symB)
-       _test(symC)
-
-       _test(symB, indices=[1])
-       _test(symB, indices=[0,2])
-       _test(symB, indices=[0,2,3])
-       _test(symB, indices=[2,0,3], phase=-1)
-
-       _test(symC, indices=[0,1])
-       _test(symC, indices=[1,3],   phase=-1)
-       _test(symC, indices=[1,3,5])
-
-       # Corner cases
-       must_fail(_test, ValueError)(symB, indices=[])
-
-       out = symB.flatten_symlabels([1])
        assert type(out) is np.ndarray
-       self.assertEqualArray(out, np.array(Sj))
+       assert all(noniterable(v) for v in out)
+       assert all(v >= 0         for v in out)
+       util.assert_array_equal(out, ans)
 
 
 
-   def test_aux_symlabels(self):
 
-       def _test(sym, signs, symlabels, indices, phase=1):
+   @pytest.mark.parametrize("key, indices, phase", \
+                            [
+                             ["A1",  None,    None], \
+                             ["B1",  None,    None], \
+                             ["B1",  [1],     None], \
+                             ["B1",  [0,2],   None], \
+                             ["B1",  [0,2,3], None], \
+                             ["B1",  [2,0,3], None], \
+                             ["B1",  [2,0,3],   -1], \
+                             ["B2",  None,    None], \
+                             ["B2",  [1,0],   None], \
+                             ["B2",  [1,2],     -1], \
+                             ["B2",  [3,1,2],   -1], \
+                            ]) 
+   def test_flatten_symlabels(self, key, indices, phase):
 
-           out = sym.aux_symlabels(indices, phase)     
-           ans = lib.make_aux_symlabels(signs, symlabels, \ 
-                                        sym.qtot, sym.mod, phase)
+       sym = self.symmetries(key)
 
-           assert type(out) is np.ndarray
+       if  indices is None:
+           indices = range(sym.num_symlegs)
 
-           size = np.prod([len(s) for s in symlabels[0]])
-           self.assertEqual(out.shape, (size, 1))
-           self.assertCloseArray(out, ans)
+       if  phase is None:
+           phase = 1
 
-       # Define symlabels
-       Si = np.arange(0,5)
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-       Sl = np.arange(0,4)
+       signs     = ''.join([sym.signs[i]     for i in indices]) 
+       symlabels =         [sym.symlabels[i] for i in indices] 
 
-       # Test-0
-       sym     = tn.Symmetry1D("+--", [Si,Sj,Sk])
-       indices = [0,2]
+       out  = sym.flatten_symlabels(indices, phase)
+       ans  = lib.flatten_symlabels(signs,   symlabels,   phase)
+       ans1 = lib.flatten_symlabels_1(signs, symlabels, phase)
+       ans2 = lib.flatten_symlabels_2(signs, symlabels, phase)
+
+       assert type(out) is np.ndarray
+       assert out.shape == (lib.sym_size(symlabels), 1)
+
+       util.assert_array_close(out, ans)
+       util.assert_array_close(out, ans1)
+       util.assert_array_close(out, ans2)
+
+
+   """
+   @pytest.mark.parametrize("key, indices, symindices, phase", \
+                            [
+                             ["A1",  [0,2],    ([0,2],   [1]),    1], \
+                             ["A1",  [0,2],    ([0,2],   [1]),   -1], \
+                             ["B1",  [0,3],    ([0,3],   [1,2]),  1], \
+                             ["B2",  [0,5],    ([0,3],   [1,2]),  1], \
+                             ["B2",  [0,5,3],  ([0,3,2], [1]),    1], \
+                             ["C1",  [0,3],    ([0,3],   [1,2]),  1], \
+                            ]) 
+   def test_aux_symlabels(self, key, indices, symindices, phase):
+
+       sym = self.symmetries(key) 
+
+       signs     = [[], []]
+       symlabels = [[], []]
+       qtot      = sym.qtot
+       mod       = sym.mod
+
+       for k in (0,1):
+         for i in symindices[k]:
+             signs[k].append(sym.signs[i])
+             symlabels[k].append(sym.symlabels[i])
+
+       for k in (0,1):
+           signs[k] = ''.join(signs[k])
+
+       out = sym.aux_symlabels(indices, phase)     
+       ans = lib.make_aux_symlabels(signs, symlabels, qtot, mod, phase)
+
+       assert type(out) is np.ndarray
+       util.assert_array_close(out, ans)
+   """
+
+
+
+   @pytest.mark.parametrize("key, symindices, phase", \
+                            [
+                             ["A1",  ([0,2],   [1]),    1], \
+                             ["A1",  ([0,2],   [1]),   -1], \
+                             ["B1",  ([0,3],   [1,2]),  1], \
+                             ["B2",  ([0,3],   [1,2]),  1], \
+                             ["B2",  ([0,3,2], [1]),    1], \
+                             ["C1",  ([0,3],   [1,2]),  1], \
+                            ]) 
+   def test_aux_symlabels(self, key, symindices, phase):
+
+       sym = self.symmetries(key) 
+
+       signs     = [[], []]
+       symlabels = [[], []]
+       qtot      = sym.qtot
+       mod       = sym.mod
+
+       for k in (0,1):
+         for i in symindices[k]:
+             signs[k].append(sym.signs[i])
+             symlabels[k].append(sym.symlabels[i])
+
+       for k in (0,1):
+           signs[k] = ''.join(signs[k])
+
+       out = sym.aux_symlabels(symindices[0], phase)     
+       ans = lib.make_aux_symlabels(signs, symlabels, qtot, mod, phase)
+
+       assert type(out) is np.ndarray
+       util.assert_array_close(out, ans)
+
+
+
+
+   @pytest.mark.parametrize("key, indices, which", [["A1", [0,2], 1]])
+   def test_aux_symlabels_by_hand(self, key, indices, which):
+
+       sym = self.symmetries(key)
+
+       ans = self.symlabels[which]
        out = sym.aux_symlabels(indices)
-       ans = np.array(Sj)
-       self.assertCloseArray(out, ans)
 
-       # Test-1
-       sym       = tn.Symmetry1D("+--", [Si,Sj,Sk])
-       signs     = (["+-"],  ["-"])
-       symlabels = ([Si,Sk], [Sj])
-       indices   = [0,2]
-       _test(sym, signs, symlabels, indices)
-
-       # Test-2
-       sym       = tn.Symmetry1D("--+-",   [Sl,Sj,Si,Sk])
-       signs     = (["--"],  ["-+"])
-       symlabels = ([Sl,Sk], [Sj,Si])
-       indices   = [0,3]
-       _test(sym, signs, symlabels, indices)
-
-       # Test-3
-       sym       = tn.Symmetry1D("--+-",   [Sl,Sj,Si,Sk], qtot=1, mod=2)
-       signs     = (["--"],  ["-+"])
-       symlabels = ([Sl,Sk], [Sj,Si])
-       indices   = [0,3]
-       _test(sym, signs, symlabels, indices, phase=-1)
-
-       # Test-4
-       sym       = tn.Symmetry1D("--0+0-", [Sl,Sj,Si,Sk])
-       signs     = (["--"], ["-+"])
-       symlabels = ([Sl,Sk], [Sj,Si])
-       indices   = [0,5]
-       _test(sym, signs, symlabels, indices)
-
-       # Test-5
-       sym       = tn.Symmetry1D("--0+0-", [Sl,Sj,Si,Sk])
-       signs     = (["--+"], ["-"])
-       symlabels = ([Sl,Sk,Si], [Sj])
-       indices   = [0,5,3]
-       _test(sym, signs, symlabels, indices)
+       assert type(out) is np.ndarray
+       util.assert_array_close(out, ans)
 
 
 
-   def test_align_symlabels(self):
+   @pytest.mark.parametrize("key, symlabels, aligned_symlabels",           \
+           [                                                               \
+            ["A1", [np.arange(0,5), np.arange(0,2)], np.array([0,1])],     \
+            ["A1", [np.arange(0,5), np.arange(1,5)], np.array([1,2,3,4])], \
+           ])
+   def test_align_symlabels(self, key, symlabels, aligned_symlabels):
+       
+       sym = self.symmetries(key)
 
-       # Define symmetries
-       Si = np.arange(0,5)
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-       Sl = np.arange(0,4)
+       out = sym.align_symlabels(*symlabels)
+       ans = lib.align_symlabels(*symlabels)
 
-       symA = tn.Symmetry1D("+--",  [Si,Sj,Sk])
-       symB = tn.Symmetry1D("--+-", [Sl,Sj,Si,Sk])
+       util.assert_array_close(out, ans)
+       util.assert_array_close(out, aligned_symlabels)
 
-       # Test-1
-       out  = symA.align_symlabels(Si, Sj)
-       ans  = lib.align_symlabels(Si, Sj)
-       ans1 = np.array([0,1])
-       self.assertCloseArray(out, ans)
-       self.assertCloseArray(out, ans1)
+       out1 = sym.align_symlabels(*symlabels[::-1])
+       ans1 = lib.align_symlabels(*symlabels[::-1])
 
-       # Test-2
-       out  = symA.align_symlabels(Si, Sk)
-       ans  = lib.align_symlabels(Si, Sk)
-       ans1 = np.array([1,2,3,4])
-       self.assertCloseArray(out, ans)
-       self.assertCloseArray(out, ans1)
+       util.assert_array_close(out1, ans1)
 
-       # Test-3 
-       Sli = lib.flatten_symlabels("-+", [Sl,Si])
-       out = symB.align_symlabels(Sli, Sk)
-       ans = lib.align_symlabels(Sli, Sk)
-       self.assertCloseArray(out, ans)
 
-       # Test-4
-       out = symB.align_symlabels(Sk, Sli)
-       ans = lib.align_symlabels(Sk, Sli)
-       self.assertCloseArray(out, ans)      
+        
+   @pytest.mark.parametrize("key, signsA, A, B", \
+           [["B1", '-+', [np.arange(0,4), np.arange(0,5)], np.arange(1,5)]])
+   def test_align_symlabels_1(self, key, signsA, A, B):
+       
+       sym = self.symmetries(key)
+
+       flatA = lib.flatten_symlabels(signsA, A)
+       B     = B if B.ndim > 1 else B.reshape((len(B), 1))
+
+       out = sym.align_symlabels(flatA, B)
+       ans = lib.align_symlabels(flatA, B)
+
+       out1 = sym.align_symlabels(B, flatA)
+       ans1 = lib.align_symlabels(B, flatA)
+
+       util.assert_array_close(out,  ans)
+       util.assert_array_close(out1, ans1)
+  
+
+
+   @pytest.mark.parametrize("key, symlabels, ans",                 \
+           [                                                       \
+            ["A4", np.arange(0,5),         np.array([0,1,2,0,1])], \
+            ["A3", np.array([-1,2,-3,-4]), np.array([1,0,1,0])],   \
+           ])
+   def test_apply_mod(self, key, symlabels, ans):
+
+       sym = self.symmetries(key)
+       out = sym.apply_mod(symlabels)
+       util.assert_array_equal(out, ans)
+
+
+
+   @pytest.mark.parametrize("key, symlabels, ans",             \
+           [                                                   \
+            ["A4", np.arange(0,5),         np.array([0,1,2])], \
+            ["A3", np.array([-1,2,-3,-4]), np.array([0,1])],   \
+           ])
+   def test_fold(self, key, symlabels, ans):
+
+       sym = self.symmetries(key)
+       out = sym.fold(symlabels)
+       util.assert_array_equal(out, ans)
+
       
-             
-
-   def test_apply_mod(self):
-
-       # Define symmetries
-       Si = np.arange(0,5)
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-
-       symA = tn.Symmetry1D("+--", [Si,Sj,Sk], mod=3)
-       symB = tn.Symmetry1D("+--", [Si,Sj,Sk], mod=2)
-
-       # Test-1
-       out = symA.apply_mod(np.arange(0,5))
-       ans = np.array([0,1,2,0,1])
-       self.assertEqualArray(out, ans)
-
-       # Test-2
-       out = symA.apply_mod(np.array([-1,2,-3,-4]))
-       ans = np.array([1,0,1,0])
-       self.assertEqualArray(out, ans)
 
 
 
-   def test_fold(self):
-
-       # Define symmetries
-       Si = np.arange(0,5)
-       Sj = np.arange(0,2)
-       Sk = np.arange(1,5)
-
-       symA = tn.Symmetry1D("+--", [Si,Sj,Sk], mod=3)
-       symB = tn.Symmetry1D("+--", [Si,Sj,Sk], mod=2)
-
-       # Test-1
-       out = symA.fold(np.arange(0,5))
-       ans = np.array([0,1,2])
-       self.assertEqualArray(out, ans)
-
-       # Test-2
-       out = symA.fold(np.array([-1,2,-3,-4]))
-       ans = np.array([0,1])
-       self.assertEqualArray(out, ans)
-
-
-
-
-
-
-class TestSymmetryUtil(TaishoTenTestCase):
-
+class TestSymmetryUtil:
 
    def test_sum_meshgrid(self):
 
-       Si =  np.arange(0,5)
-       Sj =  np.arange(0,2)
-       Sk = -np.arange(1,5)
-       Sl = -np.arange(0,4)
+       symlabels = [np.arange(0,5),  np.arange(0,2), \
+                   -np.arange(1,5), -np.arange(0,4)]
 
-       out  = tn.symmetry.sum_meshgrid(Si,Sj,Sk,Sl)
-       ans  = lib.sum_meshgrid(Si,Sj,Sk,Sl)
-       ans1 = lib.sum_meshgrid_1(Si,Sj,Sk,Sl)
+       out  = tn.symmetry.symmetry.sum_meshgrid(*symlabels)
+       ans  = lib.sum_meshgrid(*symlabels)
+       ans1 = lib.sum_meshgrid_1(*symlabels)
 
-       self.assertEqualArray(out, ans)
-       self.assertEqualArray(out, ans1)
+       util.assert_array_close(out, ans)
+       util.assert_array_close(out, ans1)
 
 
 
    def test_flatten(self):
 
-       Si =  np.arange(0,5)
-       Sj =  np.arange(0,2)
-       Sk = -np.arange(1,5)
-       Sl = -np.arange(0,4)
+       symlabels = [np.arange(0,5),  np.arange(0,2), \
+                   -np.arange(1,5), -np.arange(0,4)]
 
-       Sijkl = lib.sum_meshgrid(Si,Sj,Sk,Sl)
+       summed_symlabels = lib.sum_meshgrid(*symlabels)
 
-       out   = tn.symmetry.flatten(Sijkl)
-       ans   = lib.flatten(Sijkl)
-       ans_1 = lib.flatten_1(Sijkl)
+       out  = tn.symmetry.symmetry.flatten(summed_symlabels)
+       ans  = lib.flatten(summed_symlabels)
+       ans1 = lib.flatten_1(summed_symlabels)
 
-       self.assertEqualArray(out, ans)
-       self.assertEqualArray(out, ans1)
-
-
-
-   def test_find_zeros(self):
-
-       def _test(shape, idx):
-
-           A = lib.randn(shape)
-           for i in idx:
-               A[i] = 0.0
-
-           out = tn.symmetry.find_zeros(A)
-           self.assertEqual(out, idx[0])
-
-       np.random.seed(1)
-
-       # Test-1
-       idx   = [(1,3,7,8)]
-       shape = (10,)
-       _test(shape, idx)
-
-       # Test-2
-       idx   = [(0,2,3,6,7), (11,19,0,7,9)]
-       shape = (10,12)
-       _test(sshape, idx)
+       util.assert_array_close(out, ans)
+       util.assert_array_close(out, ans1)
 
 
 
    def test_set_symtol(self):
 
-       out = tn.symmetry.set_symtol()
-       self.assertClose(out, 2**(-16))
+       out = tn.symmetry.symmetry.set_symtol()
+       util.assert_array_close(out, 2**(-16))
 
-       out = tn.symmetry.set_symtol(1e-10)
-       self.assertClose(out, 1e-10)
+       out = tn.symmetry.symmetry.set_symtol(1e-10)
+       util.assert_array_close(out, 1e-10)
 
 
 
    def test_get_symlabels_shape(self):
 
-       Si = range(0,5)
-       Sj = range(0,2)
-       Sk = range(1,5)
-       Sl = range(2,9)
-       Sm = range(0,3)
+       symlabels = [np.arange(0,5), -np.arange(0,2), \
+                    np.arange(1,5), -np.arange(2,9), np.arange(0,3)]
 
-       ans = (5,2,4,7,3)
-       out = tn.symmetry.get_symlabels_shape([Si,Sj,Sk,Sl,Sm])
-       assert out == ans
+       out = tn.symmetry.symmetry.get_symlabels_shape(symlabels)
+       assert out == (5,2,4,7,3)
 
 
 
-   def test_sum_abs_inner_symlabels(self): 
+   @pytest.mark.parametrize("symlabels, ans",                                \
+   [                                                                         \
+   [np.array([[1,0,-2], [3,5,0], [2,1,1], [3,-4,3]]), np.array([3,8,4,10])], \
+   [np.array([[1], [3], [-2], [3]]),                  np.array([1,3,2,3]) ], \
+   [np.array([1, 3, -2, 3]),                          np.array([1,3,2,3]) ], \
+   ])
+   def test_sum_abs_inner_symlabels(self, symlabels, ans): 
 
-       Si = np.array([[1,0,-2], [3,5,0], [2,1,1], [3,-4,3]])
-       Sj = np.array([[1], [3], [-2], [3]])
-       Sk = np.array([1,3,-2,3])
+       out = tn.symmetry.symmetry.sum_abs_inner_symlabels(symlabels)
+       util.assert_array_equal(out, ans)
 
-       # Test-1
-       ans = np.array([3,8,4,10])
-       out = tn.symmetry.sum_abs_inner_symlabels(Si)
-       self.assertEqualArray(out, ans)
 
-       # Test-2
-       ans = np.array([1,3,2,3])
-       out = tn.symmetry.sum_abs_inner_symlabels(Sj)
-       self.assertEqualArray(out, ans)
 
-       # Test-3
-       ans = np.array([1,3,2,3])
-       out = tn.symmetry.sum_abs_inner_symlabels(Sk)
-       self.assertEqualArray(out, ans)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

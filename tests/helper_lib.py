@@ -9,8 +9,8 @@ import numpy as np
 import taishoten as tn
 
 from taishoten import Str
-from .util     import CLOSE_RTOL, CLOSE_ATOL
-from .util     import isiterable, noniterable
+from util      import isiterable, noniterable
+
 
 
 # --- Auxiliary functions --------------------------------------------------- #
@@ -20,7 +20,7 @@ def randn(*args, cmplx=False):
     if   cmplx:
          return randn(*args) + 1.0j*randn(*args)
     else:
-         return np.random.randn(*args)
+         return np.random.random(args)
 
 
 
@@ -37,16 +37,7 @@ def random_map_from_idx(shape, num_idx):
 
 
 
-def map_from_idx(shape, idx, val=1.0):
-
-    out = np.zeros(shape)
-    for i in idx:
-        out[i] = val
-    return out
-
-
-
-def map_from_sym(signs, symlabels, qtot=0, mod=None, tol=CLOSE_RTOL):
+def map_from_sym(signs, symlabels, qtot=0, mod=None, tol=1e-6):
 
     ndim = 1
     if  isiterable(symlabels[0][0]):
@@ -60,33 +51,43 @@ def map_from_sym(signs, symlabels, qtot=0, mod=None, tol=CLOSE_RTOL):
         flat = np.sum(abs(flat), -1)
 
     idx   = find_zeros(flat, tol=tol)  
-    shape = (len(s) for s in symlabels)
+    shape = tuple([len(s) for s in symlabels])
 
     return map_from_idx(shape, idx) 
 
 
 
-def find_zeros(x, tol=CLOSE_RTOL):
+def map_from_idx(shape, idx, val=1.0):
 
-    # Find idx of zeros in x
+    out = np.zeros(shape)
+    for i in idx:
+        out[np.unravel_index(i, shape)] = val
+    return out
+
+
+
+def find_zeros(x, tol=1e-6):
+    return find_idx(x, lambda v: abs(v) < tol)
+
+
+
+def find_nonzeros(x, tol=1e-6):
+    return find_idx(x, lambda v: abs(v) > tol)
+
+
+
+def find_idx(x, mask):
+
+    shape = x.shape
+    x     = x.ravel()
+
+    # Find idx that satisfy mask condition
     idx = []
     for i in range(len(x)):
-        if x[i] < tol:
+        if mask(x[i]):
            idx.append(i)
 
-    return tuple(idx)
-
-
-
-def find_nonzeros(x, tol=CLOSE_RTOL):
-
-    # Find idx of nonzeros in x
-    idx = []
-    for i in range(len(x)):
-        if x[i] > tol:
-           idx.append(i)
-
-    return tuple(idx)
+    return idx
 
 
 
@@ -121,18 +122,25 @@ def get_signed_symlabels(signs, symlabels, phase=1):
     return signed_symlabels
 
 
+def sym_size(x):
+    return np.prod([len(s) for s in x])
+
+
 
 
 # --- Meshgrid and flattening ----------------------------------------------- #
 
 def sum_meshgrid(*xs):
 
-    shape = (len(x) for x in xs)
+    shape = tuple([len(x) for x in xs])
+    shape = shape if xs[0].ndim == 1 else (*shape, xs[0].shape[-1])
     size  = np.prod(shape)
     sgrid = np.zeros(shape) 
 
     if    len(xs) == 1:
-          pass
+
+          for i in range(shape[0]):
+              sgrid[i] = xs[0][i]
 
     elif  len(xs) == 2:
 
@@ -179,26 +187,27 @@ def sum_meshgrid(*xs):
 
 def sum_meshgrid_1(*xs):
 
-    # Construct meshgrid
     grid  = np.meshgrid(*xs, indexing='ij')
     sgrid = sum(grid)
     return sgrid
 
 
 
-def flatten(x, xdim=None):
+def flatten(x, ndim=None):
 
-    shape = x.shape if xdim is None else x.shape[:-xdim]
+    shape = x.shape if ndim is None else x.shape[:-1]
     size  = np.prod(shape)
 
     idx      = np.indices(shape)
     flat_idx = np.ravel_multi_index(idx, shape)
 
-    flat_shape = (size, ) if xdim is None else (size, xdim)
+    flat_shape = (size, ) if ndim is None else (size, ndim)
     flat_x     = np.zeros(flat_shape)
 
     if    len(shape) == 1:
-          pass
+
+          for i in range(shape[0]):
+              flat_x[flat_idx[i]] = x[i]
 
     elif  len(shape) == 2:
 
@@ -242,13 +251,13 @@ def flatten(x, xdim=None):
 
 
 def flatten_1(x):
-    return sgrid.flatten()
+    return x.flatten()
 
 
 
 def flatten_symlabels(signs, symlabels, phase=1, ndim=1):
 
-    signed_symlabels = get_signed_symlabels(signs, symlabels, phase=1)
+    signed_symlabels = get_signed_symlabels(signs, symlabels, phase)
 
     sgrid = sum_meshgrid(*signed_symlabels)
     if  ndim == 1:
@@ -261,24 +270,27 @@ def flatten_symlabels(signs, symlabels, phase=1, ndim=1):
 
 def flatten_symlabels_1(signs, symlabels, phase=1):
 
-    # Strictly xdim=1
-    signed_symlabels = get_signed_symlabels(signs, symlabels, phase=1)
- 
-    sgrid          = sum_meshgrid_1(*signed_symlabels)
-    flat_symlabels = flatten(sgrid)
+    # Strictly ndim=1
+    signed_symlabels = get_signed_symlabels(signs, symlabels, phase)
 
+    sgrid = sum_meshgrid_1(*signed_symlabels)
+    sgrid = sgrid.reshape((*sgrid.shape, 1))
+
+    flat_symlabels = flatten(sgrid, 1)
     return flat_symlabels
 
 
 
 def flatten_symlabels_2(signs, symlabels, phase=1):
 
-    # Strictly xdim=1
-    signed_symlabels = get_signed_symlabels(signs, symlabels, phase=1)
+    # Strictly ndim=1
+    signed_symlabels = get_signed_symlabels(signs, symlabels, phase)
  
-    sgrid          = sum_meshgrid_1(*signed_symlabels)
-    flat_symlabels = flatten_1(sgrid)
+    sgrid = sum_meshgrid_1(*signed_symlabels)
+    sgrid = sgrid.reshape((*sgrid.shape, 1))
 
+    flat_symlabels = flatten_1(sgrid)
+    flat_symlabels = flat_symlabels.reshape(len(flat_symlabels), 1)
     return flat_symlabels
 
 
@@ -286,7 +298,7 @@ def flatten_symlabels_2(signs, symlabels, phase=1):
 
 # --- Aligned, folded and auxiliary symlabels ------------------------------- #
 
-def align_symlabels(a, b, tol=CLOSE_RTOL):
+def align_symlabels(a, b, tol=1e-6):
 
     idx = []
     shape = (len(a), len(b))
@@ -318,7 +330,7 @@ def fold_1D(symlabels, mod=None):
 
    
 def make_aux_symlabels(signs, symlabels, \
-                       qtot=0, mod=None, phase=1, tol=CLOSE_RTOL):
+                       qtot=0, mod=None, phase=1, tol=1e-6):
 
     # Unpack
     lhs_signs,     rhs_signs     = signs
@@ -341,6 +353,7 @@ def make_aux_symlabels(signs, symlabels, \
     lhs  = fold(lhs, mod)
     rhs  = fold(rhs, mod)
     aux  = align_symlabels(lhs, rhs, tol=tol)
+
     return aux
 
 
@@ -390,11 +403,11 @@ def fold_3D(symlabels, mod=None, decimals=10):
 
 
 
-# --- Intermediate datastructures setup using TaishoTen --------------------- #
+# --- Intermediate data structures setup using TaishoTen -------------------- #
 
 def create_random_map(legs, shape, num_elems):
 
-    array = lib.random_map_from_idx(shape, num_elems)[0]
+    array = random_map_from_idx(shape, num_elems)[0]
     out = tn.Map(array, legs)   
     return out
 
@@ -405,7 +418,7 @@ def setup_tensor(signs, symlabels, dense_shape, *args, **kwargs):
 
     sym_shape = (len(s) for s in symlabels[:-1])
 
-    array  = lib.randn(*sym_shape, *dense_shape) 
+    array  = randn(*sym_shape, *dense_shape) 
     sym    = tn.Symmetry1D(signs, symlabels, *args, **kwargs)
     tensor = tn.Tensor(array, sym)
 
@@ -417,7 +430,7 @@ def setup_tensor_3D(signs, symlabels, dense_shape, *args, **kwargs):
 
     sym_shape = (len(s) for s in symlabels[:-1])
 
-    array  = lib.randn(*sym_shape, *dense_shape) 
+    array  = randn(*sym_shape, *dense_shape) 
     sym    = tn.Symmetry3D(signs, symlabels, *args, **kwargs)
     tensor = tn.Tensor(array, sym)
 
