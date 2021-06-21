@@ -3,37 +3,22 @@
 
 import pytest
 import numpy as np
-import helper_lib as lib
 
+import lib
 import util
-from util import isiterable,  noniterable
 
 import taishoten as tn
 from taishoten import Str
 
 
 
-
-def make_random_map(legs, shape, num_elems):
-
-    array, idx = lib.random_map_from_idx(shape, num_elems)
-    random_map = tn.Map(array, legs)
-
-    data = {"legs": legs, "shape": shape, \
-            "idx": idx, "array": array}
-
-    return random_map, data
-
-
-
-
 @pytest.fixture
-def random_maps():
+def fixt_random_maps():
 
     dct = {}
     def make(key):
         def _make(*args, **kwargs):  
-            dct[key] = make_random_map(*args, **kwargs)
+            dct[key] = lib.make_random_map(*args, **kwargs)
         return _make
 
     np.random.seed(1)
@@ -47,21 +32,8 @@ def random_maps():
 
 
 
-
-def make_symmetry_1D(fullsigns, symlabels, qtot=0, mod=None, signs=None):
-
-    sym  = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
-
-    data = {"fullsigns": fullsigns, "signs": signs, \
-            "symlabels": symlabels, "qtot": qtot, "mod": mod}
-
-    return sym, data
-
-
-
-
 @pytest.fixture
-def symmetries1D():
+def fixt_symmetries_1D():
     
     Si = np.arange(0,4)
     Sj = np.arange(1,3)
@@ -73,7 +45,7 @@ def symmetries1D():
     dct = {}
     def make(key):
         def _make(*args, **kwargs):  
-            dct[key] = make_symmetry_1D(*args, **kwargs)
+            dct[key] = lib.make_symmetry_1D(*args, **kwargs)
         return _make
 
     make("A1")("--+-",  [Si,Sj,Sk,Sl])
@@ -85,13 +57,15 @@ def symmetries1D():
 
 
 
+
+
     
 
 class TestMap:
 
    @pytest.fixture(autouse=True)
-   def request_random_maps_and_data(self, random_maps):
-       self._random_maps_and_data = random_maps
+   def request_random_maps_and_data(self, fixt_random_maps):
+       self._random_maps_and_data = fixt_random_maps
 
 
 
@@ -180,17 +154,16 @@ class TestMap:
                                           ["B1", Str("MLN")],  \
                                           ["B2", Str("MLN")],  \
                                           ["B3", Str("MLN")]])
-   def test_compute(self, symmetries1D, key, legs):
+   def test_compute(self, fixt_symmetries_1D, key, legs):
 
-       sym, _ = symmetries1D[key]
+       sym, _ = fixt_symmetries_1D[key]
        out    = tn.Map.compute(sym, legs)
 
-       array = lib.map_from_sym(sym.signs, sym.symlabels, \
-                                qtot=sym.qtot, mod=sym.mod)
-       ans = tn.Map(array, legs)
+       ans, data = lib.make_map_from_sym(legs, sym.signs, sym.symlabels, \
+                                               qtot=sym.qtot, mod=sym.mod)
 
        util.assert_map_equal(out, ans)
-       util.assert_map_vs_array(out, legs, array)
+       util.assert_map_vs_array(out, legs, data["array"])
        util.assert_map(out, legs, sym.shape)
 
 
@@ -214,19 +187,13 @@ class TestMap:
            else:
                 return A.contract(B, legsC)
 
+       subscript = tn.legs_to_subscript(A.legs, B.legs, legsC)
+       ans       = lib.np_einsum_of_maps(subscript, legsC, A, B)
+
        out = contract(A, B, legsC)
 
-       legsA     = A.legs
-       legsB     = B.legs
-       subscript = tn.legs_to_subscript(legsA, legsB, legsC)
-
-       tmp    = np.einsum(subscript, A.array, B.array)
-       idx    = lib.find_nonzeros(tmp)
-       arrayC = lib.map_from_idx(shapeC, idx, val=1.0)
-       ans    = tn.Map(arrayC, legsC)
-
        util.assert_map(out, legsC, shapeC)
-       util.assert_map_vs_array(out, legsC, arrayC)
+       util.assert_map_vs_array(out, legsC, ans.array)
        util.assert_map_equal(out, ans)
 
 

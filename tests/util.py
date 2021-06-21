@@ -13,24 +13,6 @@ from taishoten import Str
 
 
 
-# --- Auxiliary functions --------------------------------------------------- #
-
-def isiterable(x):
-    try:
-        x_iterator = iter(x)
-        isiter = True
-    except TypeError:
-        isiter = False
-
-    return isiter
-
-
-def noniterable(x):
-    return not isiterable(x)
-
-
-
-
 # --- Basic assertions ------------------------------------------------------ #
 
 def assert_array_equal(x, ans):
@@ -311,7 +293,7 @@ def assert_graph(x, nodes, legs, num_out_symlegs):
 
     assert_list(x.get_nodes(), nodes, fun=assert_node_equal)
     assert_list(x.nodes,       nodes, fun=assert_node_equal)
-    #assert_list(x.legs,        legs) # FIXME
+    assert_list(x.legs,        legs)
 
     assert x.num_nodes       == len(nodes)
     assert x.num_out_symlegs == num_out_symlegs

@@ -4,12 +4,10 @@
 import pytest
 import copy  as cp
 import numpy as np
-import helper_lib as lib
-
 import itertools
 
+import lib
 import util
-from util import isiterable, noniterable
 
 import taishoten as tn
 from taishoten import Str

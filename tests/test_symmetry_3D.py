@@ -4,62 +4,31 @@
 import pytest
 import copy  as cp
 import numpy as np
-import helper_lib as lib
 
+import lib
 import util
-from util import isiterable, noniterable
+from lib import isiterable, noniterable
 
 import taishoten as tn
+import taishoten.symmetry as tnsym
 from taishoten import Str
 
 
 
-def make_symmetry_3D(fullsigns, symlabels, qtot=0, mod=None, signs=None):
-
-    sym  = tn.Symmetry3D(fullsigns, symlabels, qtot, mod)
-
-    data = {"fullsigns": fullsigns, "signs": signs, \
-            "symlabels": symlabels, "qtot":  qtot,  "mod": mod, "ndim": 3}
-
-    return sym, data
-
 
 
 
 @pytest.fixture
-def mod3D():
-    mod  = (2 * np.pi / 5) * np.eye(3)
-    return mod
-
-
-
-
-@pytest.fixture
-def symlabels3D(mod3D):
-
-    dct = {}
-    def make(mod3D, key):
-        dct[key] = lib.make_symlabels_3D(mod3D, key)
-
-    make(mod3D, (3,3,1))
-    make(mod3D, (2,2,1))
-
-    return dct
-
-
-
-
-@pytest.fixture
-def symmetries3D(symlabels3D, mod3D):
+def fixt_symmetries_3D(fixt_symlabels_3D, fixt_mod_3D):
 
     dct = {}
     def make(key):
         def _make(*args, **kwargs):  
-            dct[key] = make_symmetry_3D(*args, **kwargs)
+            dct[key] = lib.make_symmetry_3D(*args, **kwargs)
         return _make
 
-    kpts = symlabels3D[(3,3,1)]
-    mod  = mod3D
+    kpts = fixt_symlabels_3D[(3,3,1)]
+    mod  = fixt_mod_3D
 
     make("A1")("+--",    [kpts]*3)
     make("A2")("+--",    [kpts]*3,               mod=mod)
@@ -68,7 +37,7 @@ def symmetries3D(symlabels3D, mod3D):
     make("C1")("--+-",   [kpts]*4, qtot=kpts[2], mod=mod)
     make("C2")("--0+0-", [kpts]*4, qtot=kpts[2], mod=mod, signs="--+-")
 
-    kpts = symlabels3D[(2,2,1)]
+    kpts = fixt_symlabels_3D[(2,2,1)]
 
     make("D1")("+--",    [kpts]*3)
     make("D2")("+--",    [kpts]*3,               mod=mod)
@@ -81,24 +50,27 @@ def symmetries3D(symlabels3D, mod3D):
 
 
 
+
+
+
 class TestSymmetry3D:
 
 
    @pytest.fixture(autouse=True)
-   def request_mod(self, mod3D):
-       self.mod = mod3D
+   def request_mod(self, fixt_mod_3D):
+       self.mod = fixt_mod_3D
 
 
 
    @pytest.fixture(autouse=True)
-   def request_symlabels(self, symlabels3D):
-       self.symlabels = symlabels3D
+   def request_symlabels(self, fixt_symlabels_3D):
+       self.symlabels = fixt_symlabels_3D
 
 
 
    @pytest.fixture(autouse=True)
-   def request_symmetries_and_data(self, symmetries3D):
-       self.symmetries_and_data = symmetries3D
+   def request_symmetries_and_data(self, fixt_symmetries_3D):
+       self.symmetries_and_data = fixt_symmetries_3D
 
 
 
@@ -201,43 +173,6 @@ class TestSymmetry3D:
 
 
 
-   """
-   @pytest.mark.parametrize("key, indices, symindices, phase", \
-                            [
-                             ["A1",  [0,2],    ([0,2],   [1]),    1], \
-                             ["A2",  [0,2],    ([0,2],   [1]),    1], \
-                             ["A2",  [0,2],    ([0,2],   [1]),   -1], \
-                             ["C1",  [0,3],    ([0,3],   [1,2]),  1], \
-                             ["C1",  [3,0],    ([3,0],   [1,2]),  1], \
-                             ["C2",  [0,5],    ([0,3],   [1,2]),  1], \
-                             ["C2",  [0,5,3],  ([0,3,2],   [1]),  1], \
-                            ]) 
-   def test_aux_symlabels(self, key, indices, symindices, phase):
-
-       sym = self.symmetries(key) 
-
-       signs     = [[], []]
-       symlabels = [[], []]
-       qtot      = sym.qtot
-       mod       = sym.mod
-
-       for k in (0,1):
-         for i in symindices[k]:
-             signs[k].append(sym.signs[i])
-             symlabels[k].append(sym.symlabels[i])
-
-       for k in (0,1):
-           signs[k] = ''.join(signs[k])
-
-       out = sym.aux_symlabels(indices, phase)     
-       ans = lib.make_aux_symlabels(signs, symlabels, qtot, mod, phase)
-
-       assert type(out) is np.ndarray
-       util.assert_array_close(out, ans)
-   """
-
-
-
    @pytest.mark.parametrize("key, symindices, phase", \
                             [
                              ["A1",  ([0,2],   [1]),    1], \
@@ -252,21 +187,8 @@ class TestSymmetry3D:
 
        sym = self.symmetries(key) 
 
-       signs     = [[], []]
-       symlabels = [[], []]
-       qtot      = sym.qtot
-       mod       = sym.mod
-
-       for k in (0,1):
-         for i in symindices[k]:
-             signs[k].append(sym.signs[i])
-             symlabels[k].append(sym.symlabels[i])
-
-       for k in (0,1):
-           signs[k] = ''.join(signs[k])
-
        out = sym.aux_symlabels(symindices[0], phase)     
-       ans = lib.make_aux_symlabels(signs, symlabels, qtot, mod, phase)
+       ans = lib.make_aux_symlabels(sym, symindices, phase)
 
        assert type(out) is np.ndarray
        util.assert_array_close(out, ans)
@@ -339,26 +261,26 @@ class TestSymmetry3D:
 
 class TestSymmetryUtil:
 
-   def test_sum_meshgrid(self, symlabels3D):
+   def test_sum_meshgrid(self, fixt_symlabels_3D):
 
-       kpts      = symlabels3D[(3,3,1)]
+       kpts      = fixt_symlabels_3D[(3,3,1)]
        symlabels = [kpts]*4
 
-       out  = tn.symmetry.symmetry.sum_meshgrid(*symlabels)
+       out  = tnsym.symmetry.sum_meshgrid(*symlabels)
        ans  = lib.sum_meshgrid(*symlabels)
 
        util.assert_array_close(out, ans)
 
 
 
-   def test_flatten(self, symlabels3D):
+   def test_flatten(self, fixt_symlabels_3D):
 
-       kpts      = symlabels3D[(3,3,1)]
+       kpts      = fixt_symlabels_3D[(3,3,1)]
        symlabels = [kpts]*4
 
        summed_symlabels = lib.sum_meshgrid(*symlabels)
 
-       out  = tn.symmetry.symmetry.flatten(summed_symlabels)
+       out  = tnsym.symmetry.flatten(summed_symlabels)
        ans  = lib.flatten(summed_symlabels)
 
        util.assert_array_close(out, ans)
@@ -371,7 +293,7 @@ class TestSymmetryUtil:
                              [-1, 0, 0], [ 1,-1, 0], [1, 2, 0], \
                              [ 2, 0, 0], [-2, 1, 0], [2,-2, 0]])
 
-       out = tn.symmetry.symmetry.get_symlabels_shape([symlabels]*4)
+       out = tnsym.symmetry.get_symlabels_shape([symlabels]*4)
        assert out == (9,9,9,9)
 
 
@@ -383,7 +305,7 @@ class TestSymmetryUtil:
                              [ 2, 0, 0], [-2, 1, 0], [2,-2, 0]])
 
        ans = np.array([0,1,2,1,2,3,2,3,4])
-       out = tn.symmetry.symmetry.sum_abs_inner_symlabels(symlabels)
+       out = tnsym.symmetry.sum_abs_inner_symlabels(symlabels)
        util.assert_array_equal(out, ans)
 
 
@@ -395,164 +317,7 @@ class TestSymmetryUtil:
 
 
 
-@pytest.fixture
-def symmetries3D_1(symlabels3D, mod3D):
 
-    kpts = symlabels3D[(3,3,1)]
-    mod  = mod3D 
- 
-    dct = {}
-    def make(legs, fullsigns, suffix=None, **kwargs):
-
-        symlegs = ''.join(l for i,l in enumerate(legs) if fullsigns[i] != '0')
-        symlegs = symlegs.upper()
-        symlabels = [kpts]*len(symlegs)  
-
-        sym, data = make_symmetry_3D(fullsigns, symlabels, **kwargs)
-
-        key = ",".join([legs, fullsigns]) 
-        if  suffix:
-            key = ",".join([key, suffix]) 
-
-        dct[key] = (sym, data, Str(legs), Str(symlegs))
-
-    make("ijlm", "+++-", suffix="M1", mod=mod)
-    make("nojl", "++--", suffix="M1", mod=mod)
-    make("ijk",  "++-",  suffix="M1", mod=mod)
-    make("klm",  "++-",  suffix="M1", mod=mod)
-    make("klm",  "++-",  suffix="M2", mod=2*mod)
-
-    make("inom", "+++-",  suffix="M1", mod=mod)
-    make("inp",   "++-",  suffix="M1", mod=mod)
-    make("pom",   "--+",  suffix="M1", mod=mod)
-
-    make("ixnyom", "+0+0+-", suffix="M1", mod=mod, signs="+++-")
-    make("inzxp",  "++00-",  suffix="M1", mod=mod, signs="++-")
-    make("pyzom",  "-00-+",  suffix="M1", mod=mod, signs="--+")
-
-    sym = tn.Symmetry1D("++-", [np.arange(0,2)]*3)
-    dct["klm,++-,Invalid,1D"] = (sym, [], Str("klm"), Str("KLM"))
-
-    return dct
-
-
-
-
-
-@pytest.fixture
-def symmetry_contractions(symmetries3D_1):
-
-    dct = {}
-    def make(keyA, keyB, keyC):
-
-        symA, _, legsA, symlegsA = symmetries3D_1[keyA] 
-        symB, _, legsB, symlegsB = symmetries3D_1[keyB]
-        symC, _, legsC, symlegsC = symmetries3D_1[keyC]
-
-        sym     = tn.dictriplet(symA,     symB,     symC)
-        legs    = tn.dictriplet(legsA,    legsB,    legsC) 
-        symlegs = tn.dictriplet(symlegsA, symlegsB, symlegsC) 
-
-        symcon = tn.SymmetryContraction(symA, symB, legs)
-        dct[(keyA, keyB, keyC)] = (symcon, sym, legs, symlegs)
-
-    make("ijk,++-,M1",       "klm,++-,M1",     "ijlm,+++-,M1")
-    make("ijlm,+++-,M1",     "nojl,++--,M1",   "inom,+++-,M1")
-    make("inom,+++-,M1",     "inp,++-,M1",     "pom,--+,M1")
-    make("ixnyom,+0+0+-,M1", "inzxp,++00-,M1", "pyzom,-00-+,M1")
-
-    return dct
-
-
-
-
-
-class TestSymmetryContraction3D:
-
-   @pytest.fixture(autouse=True)
-   def request_symmetries(self, symmetries3D_1):
-       self._symmetries_and_data = symmetries3D_1
-
-
-   @pytest.fixture(autouse=True)
-   def request_symmetry_contractions(self, symmetry_contractions):
-       self._symcon_and_data = symmetry_contractions
-
-
-   def symmetries_and_data(self, key):
-       sym, data, legs, symlegs = self._symmetries_and_data[key]
-       return sym, data, legs, symlegs
-
-
-   def symmetry_contractions_and_data(self, key):
-       symcon, sym, legs, symlegs = self._symcon_and_data[key]
-       return symcon, sym, legs, symlegs
-
-
-
-   # --- Test constructor --------------------------------------------------- #
-
-   @pytest.mark.parametrize("key, phase",                          \
-   [                                                               \
-   [("ijk,++-,M1",       "klm,++-,M1",     "ijlm,+++-,M1"),    1], \
-   [("ijlm,+++-,M1",     "nojl,++--,M1",   "inom,+++-,M1"),    1], \
-   [("inom,+++-,M1",     "inp,++-,M1",     "pom,--+,M1"),     -1], \
-   [("ixnyom,+0+0+-,M1", "inzxp,++00-,M1", "pyzom,-00-+,M1"), -1], \
-   ])
-   def test_construct(self, key, phase):
-
-       out, sym, legs, symlegs = self.symmetry_contractions_and_data(key)
-
-       sym1     = cp.deepcopy(sym)
-       symlegs1 = cp.deepcopy(symlegs)
-
-       sym1["C"]     = None
-       symlegs1["C"] = None
-
-       util.assert_symmetry_contraction(out, sym1, legs, symlegs1, phase)
-
-
-
-   @pytest.mark.parametrize("keyA, keyB, legsC",      \
-   [                                                  \
-   ["ijk,++-,M1", "klm,++-,Invalid,1D", Str("ijlm")], \
-   ["ijk,++-,M1", "klm,++-,M2",         Str("ijlm")], \
-   ])
-   @pytest.mark.xfail
-   def test_construct_failed(self, keyA, keyB, legsC):
-
-       symA, _, legsA, _ = self.symmetries_and_data(keyA)
-       symB, _, legsB, _ = self.symmetries_and_data(keyB)
-
-       legs   = tn.dictriplet(legsA, legsB, legsC) 
-       symcon = tn.SymmetryContraction(symA, symB, legs)
-
-
-
-   # --- Test compute() ----------------------------------------------------- #
-
-   @pytest.mark.parametrize("key, phase",                          \
-   [                                                               \
-   [("ijk,++-,M1",       "klm,++-,M1",     "ijlm,+++-,M1"),    1], \
-   [("ijlm,+++-,M1",     "nojl,++--,M1",   "inom,+++-,M1"),    1], \
-   [("inom,+++-,M1",     "inp,++-,M1",     "pom,--+,M1"),     -1], \
-   [("ixnyom,+0+0+-,M1", "inzxp,++00-,M1", "pyzom,-00-+,M1"), -1], \
-   ])
-   def test_compute(self, key, phase):
-
-       out, sym, legs, symlegs = self.symmetry_contractions_and_data(key)
-
-       out.compute()
-       util.assert_symmetry_contraction(out, sym, legs, symlegs, phase)
-
-
-
-
-
-
-
-'''
-'''
 
 
 

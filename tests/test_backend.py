@@ -4,8 +4,8 @@
 import pytest
 import copy  as cp
 import numpy as np
-import helper_lib as lib
 
+import lib
 import util
 import taishoten as tn
 

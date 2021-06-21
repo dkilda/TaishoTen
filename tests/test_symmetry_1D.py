@@ -3,32 +3,20 @@
 
 import pytest
 import numpy as np
-import helper_lib as lib
 
+import lib
 import util
-from util import isiterable,  noniterable
+from lib import isiterable, noniterable
 
 import taishoten as tn
+import taishoten.symmetry as tnsym
 from taishoten import Str
 
 
 
 
-
-def make_symmetry_1D(fullsigns, symlabels, qtot=0, mod=None, signs=None):
-
-    sym  = tn.Symmetry1D(fullsigns, symlabels, qtot, mod)
-
-    data = {"fullsigns": fullsigns, "signs": signs, \
-            "symlabels": symlabels, "qtot": qtot, "mod": mod}
-
-    return sym, data
-
-
-
-
 @pytest.fixture
-def symlabels1D():
+def fixt_symlabels_1D():
 
     Si = np.arange(0,5)
     Sj = np.arange(0,2)
@@ -40,15 +28,16 @@ def symlabels1D():
 
 
 
+
 @pytest.fixture
-def symmetries1D(symlabels1D):
+def fixt_symmetries_1D(fixt_symlabels_1D):
     
-    Si, Sj, Sk, Sl = symlabels1D 
+    Si, Sj, Sk, Sl = fixt_symlabels_1D
 
     dct = {}
     def make(key):
         def _make(*args, **kwargs):  
-            dct[key] = make_symmetry_1D(*args, **kwargs)
+            dct[key] = lib.make_symmetry_1D(*args, **kwargs)
         return _make
 
     make("A1")("+--",  [Si,Sj,Sk])
@@ -76,14 +65,14 @@ class TestSymmetry1D:
 
 
    @pytest.fixture(autouse=True)
-   def request_symlabels(self, symlabels1D):
-       self.symlabels = symlabels1D
+   def request_symlabels(self, fixt_symlabels_1D):
+       self.symlabels = fixt_symlabels_1D
 
 
 
    @pytest.fixture(autouse=True)
-   def request_symmetries_and_data(self, symmetries1D):
-       self.symmetries_and_data = symmetries1D
+   def request_symmetries_and_data(self, fixt_symmetries_1D):
+       self.symmetries_and_data = fixt_symmetries_1D
 
 
 
@@ -166,7 +155,7 @@ class TestSymmetry1D:
        np.random.seed(1)
 
        assert not sym.has_map
-       mp = lib.create_random_map(legs, shape, num_elems)
+       mp, _ = lib.make_random_map(legs, shape, num_elems)
        sym.set_map(mp)
 
        assert sym.has_map
@@ -195,7 +184,7 @@ class TestSymmetry1D:
            A[i] = 0.0
 
        out  = sym.find_zeros(A)
-       out1 = tn.symmetry.symmetry.find_zeros(A)
+       out1 = tnsym.symmetry.find_zeros(A)
 
        util.assert_array_equal(out,  idx[0])
        util.assert_array_equal(out1, idx[0])
@@ -266,40 +255,6 @@ class TestSymmetry1D:
        util.assert_array_close(out, ans2)
 
 
-   """
-   @pytest.mark.parametrize("key, indices, symindices, phase", \
-                            [
-                             ["A1",  [0,2],    ([0,2],   [1]),    1], \
-                             ["A1",  [0,2],    ([0,2],   [1]),   -1], \
-                             ["B1",  [0,3],    ([0,3],   [1,2]),  1], \
-                             ["B2",  [0,5],    ([0,3],   [1,2]),  1], \
-                             ["B2",  [0,5,3],  ([0,3,2], [1]),    1], \
-                             ["C1",  [0,3],    ([0,3],   [1,2]),  1], \
-                            ]) 
-   def test_aux_symlabels(self, key, indices, symindices, phase):
-
-       sym = self.symmetries(key) 
-
-       signs     = [[], []]
-       symlabels = [[], []]
-       qtot      = sym.qtot
-       mod       = sym.mod
-
-       for k in (0,1):
-         for i in symindices[k]:
-             signs[k].append(sym.signs[i])
-             symlabels[k].append(sym.symlabels[i])
-
-       for k in (0,1):
-           signs[k] = ''.join(signs[k])
-
-       out = sym.aux_symlabels(indices, phase)     
-       ans = lib.make_aux_symlabels(signs, symlabels, qtot, mod, phase)
-
-       assert type(out) is np.ndarray
-       util.assert_array_close(out, ans)
-   """
-
 
 
    @pytest.mark.parametrize("key, symindices, phase", \
@@ -315,21 +270,8 @@ class TestSymmetry1D:
 
        sym = self.symmetries(key) 
 
-       signs     = [[], []]
-       symlabels = [[], []]
-       qtot      = sym.qtot
-       mod       = sym.mod
-
-       for k in (0,1):
-         for i in symindices[k]:
-             signs[k].append(sym.signs[i])
-             symlabels[k].append(sym.symlabels[i])
-
-       for k in (0,1):
-           signs[k] = ''.join(signs[k])
-
        out = sym.aux_symlabels(symindices[0], phase)     
-       ans = lib.make_aux_symlabels(signs, symlabels, qtot, mod, phase)
+       ans = lib.make_aux_symlabels(sym, symindices, phase)
 
        assert type(out) is np.ndarray
        util.assert_array_close(out, ans)
@@ -427,7 +369,7 @@ class TestSymmetryUtil:
        symlabels = [np.arange(0,5),  np.arange(0,2), \
                    -np.arange(1,5), -np.arange(0,4)]
 
-       out  = tn.symmetry.symmetry.sum_meshgrid(*symlabels)
+       out  = tnsym.symmetry.sum_meshgrid(*symlabels)
        ans  = lib.sum_meshgrid(*symlabels)
        ans1 = lib.sum_meshgrid_1(*symlabels)
 
@@ -443,7 +385,7 @@ class TestSymmetryUtil:
 
        summed_symlabels = lib.sum_meshgrid(*symlabels)
 
-       out  = tn.symmetry.symmetry.flatten(summed_symlabels)
+       out  = tnsym.symmetry.flatten(summed_symlabels)
        ans  = lib.flatten(summed_symlabels)
        ans1 = lib.flatten_1(summed_symlabels)
 
@@ -454,10 +396,10 @@ class TestSymmetryUtil:
 
    def test_set_symtol(self):
 
-       out = tn.symmetry.symmetry.set_symtol()
+       out = tnsym.symmetry.set_symtol()
        util.assert_array_close(out, 2**(-16))
 
-       out = tn.symmetry.symmetry.set_symtol(1e-10)
+       out = tnsym.symmetry.set_symtol(1e-10)
        util.assert_array_close(out, 1e-10)
 
 
@@ -467,7 +409,7 @@ class TestSymmetryUtil:
        symlabels = [np.arange(0,5), -np.arange(0,2), \
                     np.arange(1,5), -np.arange(2,9), np.arange(0,3)]
 
-       out = tn.symmetry.symmetry.get_symlabels_shape(symlabels)
+       out = tnsym.symmetry.get_symlabels_shape(symlabels)
        assert out == (5,2,4,7,3)
 
 
@@ -480,7 +422,7 @@ class TestSymmetryUtil:
    ])
    def test_sum_abs_inner_symlabels(self, symlabels, ans): 
 
-       out = tn.symmetry.symmetry.sum_abs_inner_symlabels(symlabels)
+       out = tnsym.symmetry.sum_abs_inner_symlabels(symlabels)
        util.assert_array_equal(out, ans)
 
 
