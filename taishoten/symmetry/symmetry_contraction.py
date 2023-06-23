@@ -396,11 +396,3 @@ def compute_pairwise_contractions_of_maps(maps):
 
 
 
-
-
-
-
-
-
-
-

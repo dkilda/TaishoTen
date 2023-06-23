@@ -520,27 +520,3 @@ class Symmetry3D(Symmetry):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
