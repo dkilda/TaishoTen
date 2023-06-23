@@ -1,5 +1,5 @@
 # TaishoTen
-A simple package for tensor calculations with abelian cyclic symmetry
+TaishoTen efficiently computes contractions of tensors with abelian cyclic symmetry, by utilizing their internal block-sparse structure. The package is based on the algorithm outlined in [arXiv:2007.08056](https://arxiv.org/pdf/2007.08056.pdf). 
 
 
 
